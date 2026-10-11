@@ -21,8 +21,8 @@ async function lookup(t) {
   return tickerMap[t];
 }
 
-// Latest value per fiscal year from 10-K filings. Picks the concept with the most recent data.
-function series(facts, concepts, instant = false) {
+// Annual (10-K) values, or balance-sheet values from 10-K and 10-Q when anyPeriod is true.
+function series(facts, concepts, instant = false, anyPeriod = false) {
   const g = facts.facts?.["us-gaap"] || {};
   let best = [];
   for (const c of concepts) {
@@ -30,7 +30,7 @@ function series(facts, concepts, instant = false) {
     if (!rows) continue;
     const byEnd = new Map();
     for (const r of rows) {
-      if (r.form !== "10-K" || r.fp !== "FY") continue;
+      if (anyPeriod ? !["10-K", "10-Q"].includes(r.form) : (r.form !== "10-K" || r.fp !== "FY")) continue;
       if (instant) { if (r.start) continue; }
       else {
         if (!r.start) continue;
@@ -50,33 +50,71 @@ const money = v => {
   const a = Math.abs(v), s = v < 0 ? "-" : "";
   return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(1)} billion` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(0)} million` : `${s}$${Math.round(a).toLocaleString("en-US")}`;
 };
+const d = s => new Date(s).getTime();
+const near = (a, b, tol) => Math.abs(a - b) <= tol * DAY;
+const rowsOf = (facts, c) => facts.facts?.["us-gaap"]?.[c]?.units?.USD || [];
+
+// Trailing 12 months = last full year + this year's quarters so far - the same quarters last year.
+// If no newer quarterly data exists, falls back to the last full year.
+function flow(facts, concepts) {
+  let best = null;
+  for (const c of concepts) {
+    const ann = series(facts, [c]);
+    if (!ann.length) continue;
+    const fy = ann[0];
+    const cur = rowsOf(facts, c)
+      .filter(r => r.form === "10-Q" && r.start && near(d(r.start), d(fy.end) + DAY, 10) && d(r.end) > d(fy.end) + 30 * DAY)
+      .sort((a, b) => b.end.localeCompare(a.end) || b.filed.localeCompare(a.filed))[0];
+    let cand = { ttm: fy.val, end: fy.end, fyEnd: fy.end, annual: fy.val, ann, ytd: null, prior: null, months: 12 };
+    if (cur) {
+      const prior = rowsOf(facts, c)
+        .filter(r => r.form === "10-Q" && r.start && near(d(r.start), d(cur.start) - 365 * DAY, 12) && near(d(r.end), d(cur.end) - 365 * DAY, 12))
+        .sort((a, b) => b.filed.localeCompare(a.filed))[0];
+      if (prior) cand = { ttm: fy.val + cur.val - prior.val, end: cur.end, fyEnd: fy.end, annual: fy.val, ann,
+        ytd: cur.val, prior: prior.val, months: Math.round((d(cur.end) - d(cur.start)) / (30.44 * DAY)) };
+    }
+    if (!best || cand.end > best.end) best = cand;
+  }
+  return best;
+}
+// Pair two figures that cover the same period (trailing 12 months, else the same full year).
+function align(a, b) {
+  if (!a || !b) return null;
+  if (a.end === b.end) return { x: a.ttm, y: b.ttm };
+  if (a.fyEnd === b.fyEnd) return { x: a.annual, y: b.annual };
+  return null;
+}
 
 function analyzeFacts(facts) {
   if (!facts.facts?.["us-gaap"]) return null;
-  const rev = series(facts, ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet"]);
-  if (!rev.length) return null;
-  const end = rev[0].end;
-  const ni = at(series(facts, ["NetIncomeLoss", "ProfitLoss"]), end);
-  // Many big companies (e.g. Amazon) don't report a "total liabilities" line, so fall back to
-  // total liabilities-and-equity minus equity.
-  const lse = at(series(facts, ["LiabilitiesAndStockholdersEquity"], true), end);
-  const eqParent = at(series(facts, ["StockholdersEquity"], true), end);
-  const eqAll = at(series(facts, ["StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], true), end);
+  const rev = flow(facts, ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet"]);
+  if (!rev) return null;
+  const ni = flow(facts, ["NetIncomeLoss", "ProfitLoss"]);
+  const ocf = flow(facts, ["NetCashProvidedByUsedInOperatingActivities"]);
+  const capex = flow(facts, ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"]);
+
+  // Balance sheet: the most recent quarter or year-end available.
+  const bs = cs => series(facts, cs, true, true);
+  const lseS = bs(["LiabilitiesAndStockholdersEquity"]), liabS = bs(["Liabilities"]);
+  const bsEnd = lseS[0]?.end ?? liabS[0]?.end;
+  const lse = at(lseS, bsEnd), eqParent = at(bs(["StockholdersEquity"]), bsEnd);
+  const eqAll = at(bs(["StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]), bsEnd);
   let eq = eqParent ?? eqAll;
-  let liab = at(series(facts, ["Liabilities"], true), end);
+  let liab = at(liabS, bsEnd);
+  // Many big companies (e.g. Amazon) don't report a total liabilities line, so work it out.
   if (liab == null && lse != null && (eqAll ?? eqParent) != null) liab = lse - (eqAll ?? eqParent);
   if (eq == null && lse != null && liab != null) eq = lse - liab;
-  const ocf = at(series(facts, ["NetCashProvidedByUsedInOperatingActivities"]), end);
-  const capex = at(series(facts, ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"]), end);
+
   const na = (title, jargon) => ({ title, jargon, status: "na", text: "The filings don't report this in a standard way, so we can't check it." });
   const checks = [];
 
   // 1. Profit
-  if (ni == null) checks.push(na("Profit", "Net profit margin"));
+  const p = align(ni, rev);
+  if (!p || !p.y) checks.push(na("Profit", "Net profit margin"));
   else {
-    const m = ni / rev[0].val, per = Math.abs(m * 100).toFixed(0);
+    const m = p.x / p.y, per = Math.abs(m * 100).toFixed(0);
     checks.push({ title: "Profit", jargon: "Net profit margin", status: m >= 0.10 ? "good" : m >= 0.03 ? "warn" : "bad",
-      text: m >= 0 ? `Of every $100 it sold, it kept about $${per} as profit after all costs.` : `It lost about $${per} for every $100 it sold.` });
+      text: m >= 0 ? `Of every $100 it sold over the latest 12 months, it kept about $${per} as profit after all costs.` : `Over the latest 12 months, it lost about $${per} for every $100 it sold.` });
   }
   // 2. Debt
   if (liab == null || eq == null) checks.push(na("Debt", "Total liabilities to equity"));
@@ -84,33 +122,42 @@ function analyzeFacts(facts) {
   else {
     const x = liab / eq;
     checks.push({ title: "Debt", jargon: "Total liabilities to equity", status: x <= 1 ? "good" : x <= 2.5 ? "warn" : "bad",
-      text: `It owes about $${x.toFixed(1)} for every $1 that belongs to its owners. Banks and utilities usually run higher than other industries.` });
+      text: `As of ${bsEnd}, it owed about $${x.toFixed(1)} for every $1 that belongs to its owners. Banks and utilities usually run higher than other industries.` });
   }
-  // 3. Growth
-  if (rev.length < 2) checks.push(na("Growth", "Revenue growth"));
-  else {
-    const g = rev[0].val / rev[1].val - 1;
-    checks.push({ title: "Growth", jargon: "Revenue growth", status: g >= 0.08 ? "good" : g >= 0 ? "warn" : "bad",
-      text: `Sales ${g >= 0 ? "grew" : "fell"} about ${Math.abs(g * 100).toFixed(0)}% over the last year, to ${money(rev[0].val)}.` });
+  // 3. Growth: this year's quarters so far vs the same quarters last year, else last full year vs the year before.
+  let g = null, gText = "";
+  if (rev.ytd != null && rev.prior > 0) {
+    g = rev.ytd / rev.prior - 1;
+    gText = `in the latest ${rev.months} months compared with the same months a year earlier`;
+  } else if (rev.ann.length >= 2 && rev.ann[1].val > 0) {
+    g = rev.ann[0].val / rev.ann[1].val - 1;
+    gText = "over the last full year";
   }
+  if (g == null) checks.push(na("Growth", "Revenue growth"));
+  else checks.push({ title: "Growth", jargon: "Revenue growth", status: g >= 0.08 ? "good" : g >= 0 ? "warn" : "bad",
+    text: `Sales ${g >= 0 ? "grew" : "fell"} about ${Math.abs(g * 100).toFixed(0)}% ${gText}.` });
   // 4. Cash
-  if (ocf == null) checks.push(na("Cash", "Free cash flow"));
+  const none = ocf ? { ttm: 0, annual: 0, end: ocf.end, fyEnd: ocf.fyEnd } : null;
+  const c = align(ocf, capex || none);
+  if (!c) checks.push(na("Cash", "Free cash flow"));
   else {
-    const f = ocf - (capex || 0), fm = f / rev[0].val;
+    const f = c.x - c.y, fm = rev.ttm ? f / rev.ttm : 0;
     checks.push({ title: "Cash", jargon: "Free cash flow", status: f > 0 && fm >= 0.05 ? "good" : f > 0 ? "warn" : "bad",
-      text: f > 0 ? `After paying for equipment and buildings, it generated ${money(f)} in cash.` : `After paying for equipment and buildings, it used up ${money(-f)} in cash.` });
+      text: f > 0 ? `Over the latest 12 months, after paying for equipment and buildings, it generated ${money(f)} in cash.` : `Over the latest 12 months, after paying for equipment and buildings, it used up ${money(-f)} in cash.` });
   }
 
-  const n = s => checks.filter(c => c.status === s).length;
+  const n = s => checks.filter(x => x.status === s).length;
   const risks = [];
-  const st = t => checks.find(c => c.title === t)?.status;
+  const st = t => checks.find(x => x.title === t)?.status;
   if (st("Profit") === "bad") risks.push("It isn't earning much or any profit on its sales yet.");
   if (st("Debt") === "bad") risks.push("High debt can become a burden if business slows or interest rates rise.");
   if (st("Growth") === "bad") risks.push("Shrinking sales can be a sign the business is losing customers.");
   if (st("Cash") === "bad") risks.push("It is spending more cash than it brings in, so it may need to borrow or sell new shares.");
   if (!risks.length) risks.push("Even healthy companies can be hurt by competition, new regulation, or an economic downturn.");
-  return { fiscalYearEnd: end, revenue: rev[0].val, checks, risks,
-    summary: `For the year ending ${end}, it reported ${money(rev[0].val)} in sales. ${n("good")} of 4 checks look good and ${n("bad")} raise concerns.` };
+  const isTtm = rev.end !== rev.fyEnd;
+  return { fiscalYearEnd: rev.end, periodLabel: isTtm ? `12 months ending ${rev.end}` : `Year ending ${rev.end}`, balanceSheetDate: bsEnd,
+    revenue: rev.ttm, checks, risks,
+    summary: `In the ${isTtm ? "12 months" : "year"} ending ${rev.end}, it reported ${money(rev.ttm)} in sales. ${n("good")} of 4 checks look good and ${n("bad")} raise concerns.` };
 }
 
 // Optional: have Claude write the summary and risks from the computed numbers only.
