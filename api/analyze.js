@@ -57,8 +57,15 @@ function analyzeFacts(facts) {
   if (!rev.length) return null;
   const end = rev[0].end;
   const ni = at(series(facts, ["NetIncomeLoss", "ProfitLoss"]), end);
-  const liab = at(series(facts, ["Liabilities"], true), end);
-  const eq = at(series(facts, ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], true), end);
+  // Many big companies (e.g. Amazon) don't report a "total liabilities" line, so fall back to
+  // total liabilities-and-equity minus equity.
+  const lse = at(series(facts, ["LiabilitiesAndStockholdersEquity"], true), end);
+  const eqParent = at(series(facts, ["StockholdersEquity"], true), end);
+  const eqAll = at(series(facts, ["StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], true), end);
+  let eq = eqParent ?? eqAll;
+  let liab = at(series(facts, ["Liabilities"], true), end);
+  if (liab == null && lse != null && (eqAll ?? eqParent) != null) liab = lse - (eqAll ?? eqParent);
+  if (eq == null && lse != null && liab != null) eq = lse - liab;
   const ocf = at(series(facts, ["NetCashProvidedByUsedInOperatingActivities"]), end);
   const capex = at(series(facts, ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"]), end);
   const na = (title, jargon) => ({ title, jargon, status: "na", text: "The filings don't report this in a standard way, so we can't check it." });
