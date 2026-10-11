@@ -98,11 +98,11 @@ async function run(k){
   const d=await res.json();
   if(!res.ok){m.style.color="var(--bad)";m.textContent=d.error||"Something went wrong.";return}
   m.textContent="";
-  r.innerHTML=`<div class="head"><h2>${esc(d.name)} (${esc(d.ticker)})</h2><span class="tag">Year ending ${esc(d.fiscalYearEnd)}</span></div>
+  r.innerHTML=`<div class="head"><h2>${esc(d.name)} (${esc(d.ticker)})</h2><span class="tag">${esc(d.periodLabel||("Year ending "+d.fiscalYearEnd))}</span></div>
   <p class="summary">${esc(d.summary)}</p>`+
   d.checks.map(c=>`<div class="check"><div class="ctop"><h3>${esc(c.title)}</h3><span class="pill ${c.status}">${L[c.status]}</span></div><span class="jargon">Technical name: ${esc(c.jargon)}</span><p>${esc(c.text)}</p></div>`).join("")+
   `<div class="risks"><h3>What could go wrong</h3><ul>${d.risks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
-  <p class="note">Based on the company's latest annual filing with the SEC. Education only, not investment advice.</p>`;
+  <p class="note">Based on the company's latest annual and quarterly filings with the SEC. Education only, not investment advice.</p>`;
  }catch(e){m.style.color="var(--bad)";m.textContent="Couldn't reach the server. Try again."}
 }
 $("go").onclick=()=>run();
