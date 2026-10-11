@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plainvest: stocks explained in plain English</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f2f5f7;--card:#fff;--ink:#12202b;--mute:#566673;--line:#d8e0e6;--acc:#0e6f8f;--acc-ink:#fff;--good:#1f6b43;--goodbg:#e1f2e8;--warn:#85590c;--warnbg:#faefd6;--bad:#8f2433;--badbg:#f9e1e5;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24}}
+:root[data-theme="dark"]{--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 "DM Sans",system-ui,sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:"Bricolage Grotesque","DM Sans",system-ui,sans-serif;line-height:1.15;margin:0}
+nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
+.logo{font:700 22px "Bricolage Grotesque",sans-serif;color:var(--acc)}
+.nav-note{color:var(--mute);font-size:14px}
+header.hero{padding:28px 0 32px}
+h1{font-size:clamp(34px,7vw,58px);letter-spacing:-.02em;max-width:14ch}
+.sub{color:var(--mute);max-width:52ch;margin:16px 0 28px;font-size:18px}
+.demo{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+.demo label{font-weight:700;display:block;margin-bottom:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1;min-width:140px;font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);text-transform:uppercase}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 18px;background:var(--acc);color:var(--acc-ink);cursor:pointer}
+button.chip{background:transparent;color:var(--ink);border:1px solid var(--line);padding:8px 12px;font-weight:500}
+button.chip:hover,button.chip[aria-pressed="true"]{border-color:var(--acc);color:var(--acc)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.chips{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mute);font-size:14px}
+#msg{margin:12px 0 0;color:var(--bad);font-size:15px;min-height:1px}
+#result{margin-top:20px}
+.head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px}
+.head h2{font-size:28px}
+.tag{color:var(--mute);font-size:15px}
+.summary{font-size:19px;margin:12px 0 20px;padding-left:14px;border-left:4px solid var(--acc)}
+.check{display:grid;grid-template-columns:1fr;gap:6px;padding:16px 0;border-top:1px solid var(--line)}
+.ctop{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.ctop h3{font-size:19px}
+.jargon{color:var(--mute);font-size:13px}
+.pill{font-size:14px;font-weight:700;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.na{background:var(--bg);color:var(--mute)}.good{background:var(--goodbg);color:var(--good)}.warn{background:var(--warnbg);color:var(--warn)}.bad{background:var(--badbg);color:var(--bad)}
+.check p{margin:0}
+.risks{border-top:1px solid var(--line);padding-top:16px}
+.risks h3{font-size:19px;margin-bottom:6px}
+.risks ul{margin:0;padding-left:20px}
+.note{margin-top:18px;font-size:14px;color:var(--mute);background:var(--bg);border-radius:10px;padding:12px 14px}
+section.how{padding:44px 0 20px}
+section.how h2{font-size:30px;margin-bottom:16px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
+.cols h3{font-size:19px;margin-bottom:6px}
+.cols p{margin:0;color:var(--mute)}
+footer{padding:32px 0 48px;color:var(--mute);font-size:14px;border-top:1px solid var(--line);margin-top:36px}
+@media (prefers-reduced-motion:no-preference){#result>*{animation:in .25s ease-out}@keyframes in{from{opacity:0}to{opacity:1}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><span class="logo">Plainvest</span><span class="nav-note">Beta</span></nav>
+<header class="hero">
+<h1>Understand a stock before you buy it.</h1>
+<p class="sub">Type a ticker. Get a plain-English read on how the company makes money, whether it's profitable, how much it owes, and what could go wrong. No finance degree needed.</p>
+<div class="demo">
+<label for="t">Look up a US-listed company</label>
+<div class="row"><input id="t" maxlength="6" placeholder="e.g. AAPL" autocomplete="off" aria-describedby="msg"><button id="go">Explain it</button></div>
+<div class="chips"><span>Try:</span>
+<button class="chip" data-t="AAPL">AAPL</button><button class="chip" data-t="KO">KO</button><button class="chip" data-t="TSLA">TSLA</button></div>
+<p id="msg" role="status"></p>
+<div id="result" aria-live="polite"></div>
+</div>
+</header>
+<section class="how">
+<h2>What you get</h2>
+<div class="cols">
+<div><h3>Jargon, translated</h3><p>Every number comes with its technical name and what it means for you.</p></div>
+<div><h3>Four quick checks</h3><p>Profit, debt, growth, and cash, each with a clear good, watch, or concern label.</p></div>
+<div><h3>Risks up front</h3><p>The biggest things that could hurt the company, stated plainly.</p></div>
+</div>
+</section>
+<footer>
+<p>Plainvest explains public company information for education. It does not give investment advice or tell you what to buy or sell. Figures come from public SEC filings and may lag recent events.</p>
+</footer>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const L={good:"Looks good",warn:"Watch this",bad:"Concern",na:"Not enough data"};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function run(k){
+ k=(k||$("t").value).trim().toUpperCase();
+ const r=$("result"),m=$("msg");m.textContent="";r.innerHTML="";
+ if(!k){m.textContent="Enter a ticker, like AAPL.";return}
+ $("t").value=k;m.style.color="var(--mute)";m.textContent="Reading the latest annual report...";
+ try{
+  const res=await fetch("/api/analyze?ticker="+encodeURIComponent(k));
+  const d=await res.json();
+  if(!res.ok){m.style.color="var(--bad)";m.textContent=d.error||"Something went wrong.";return}
+  m.textContent="";
+  r.innerHTML=`<div class="head"><h2>${esc(d.name)} (${esc(d.ticker)})</h2><span class="tag">Year ending ${esc(d.fiscalYearEnd)}</span></div>
+  <p class="summary">${esc(d.summary)}</p>`+
+  d.checks.map(c=>`<div class="check"><div class="ctop"><h3>${esc(c.title)}</h3><span class="pill ${c.status}">${L[c.status]}</span></div><span class="jargon">Technical name: ${esc(c.jargon)}</span><p>${esc(c.text)}</p></div>`).join("")+
+  `<div class="risks"><h3>What could go wrong</h3><ul>${d.risks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
+  <p class="note">Based on the company's latest annual filing with the SEC. Education only, not investment advice.</p>`;
+ }catch(e){m.style.color="var(--bad)";m.textContent="Couldn't reach the server. Try again."}
+}
+$("go").onclick=()=>run();
+$("t").addEventListener("keydown",e=>{if(e.key==="Enter")run()});
+document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>run(b.dataset.t));
+</script>
+</body>
+</html>
