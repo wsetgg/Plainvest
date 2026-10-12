@@ -117,15 +117,13 @@ async function run(k){
  try{
   const res=await fetch("/api/analyze?ticker="+encodeURIComponent(k));
   const d=await res.json();
-  if(!res.ok){r.innerHTML="";m.style.color="var(--bad)";m.textContent=d.error||"Something went wrong.";return}
+  if(!res.ok){if(res.status===404||res.status===422){m.textContent="";r.innerHTML=`<p class="note">${esc(d.error)} Try a US company like AAPL, KO, or TSLA.</p>`}else{r.innerHTML="";m.style.color="var(--bad)";m.textContent=d.error||"Something went wrong."}return}
   m.textContent="";
   const qs=(d.quarters||[]).map(q=>`<tr><td>${qn(q.end)}</td><td>${mn(q.sales)}</td><td class="${sg(q.salesYoY)}">${pc(q.salesYoY)}</td><td class="${sg(q.profit)}">${mn(q.profit)}</td><td>${q.margin==null?"–":(q.margin*100).toFixed(1)+"%"}</td><td class="${sg(q.cash)}">${mn(q.cash)}</td></tr>`).join("");
   const sig=(d.signals||[]).map(s=>card(s.title,K[s.kind]||K.event,`<p>${esc(s.text)}</p>`)).join("")||`<p class="jargon">No big swings stood out in the latest quarter's numbers.</p>`;
   const ev=(d.events||[]).map(e=>card(e.title,K[e.kind]||K.event,`<p class="jargon">${esc(e.date)}${e.url&&e.url.startsWith("https://www.sec.gov/")?` · <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`:""}</p>`)).join("")||`<p class="jargon">No notable announcements in the past year.</p>`;
-  const meta=[d.industry?"Industry: "+esc(d.industry):"",d.exchange?esc(d.exchange):"",d.aboutByAI?"Description written by AI from the company's name and industry, so check the company's website.":""].filter(Boolean).join(" · ");
-  const about=d.about?`<p class="about">${esc(d.about)}</p><p class="jargon">${meta}</p>`:"";
   r.innerHTML=`<div class="head"><h2>${esc(d.name)} (${esc(d.ticker)})</h2><span class="tag">${esc(d.periodLabel||"")}</span></div>
-  ${about}<p class="summary">${esc(d.summary)}</p>
+  <p class="summary">${esc(d.summary)}</p>
   <h3 class="sec">Quarter by quarter</h3>
   <div class="tw"><table class="qt"><thead><tr><th>Quarter</th><th>Sales</th><th>vs year ago</th><th>Profit</th><th>Margin</th><th>Cash</th></tr></thead><tbody>${qs}</tbody></table></div>
   <h3 class="sec">What changed in the numbers</h3>${sig}
