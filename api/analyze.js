@@ -328,12 +328,18 @@ async function isFund(t) {
   } catch { return false; }
 }
 
+
 async function addEventDetails(events) {
   return Promise.all(events.map(async e => {
     if (!e.url) return e;
 
     try {
-      const r = await fetch(e.url, { headers: H() });
+      const r = await fetch(e.url, {
+        headers: {
+          "User-Agent": UA(),
+          Accept: "text/html"
+        }
+      });
       if (!r.ok) return e;
 
       const html = await r.text();
@@ -347,10 +353,11 @@ async function addEventDetails(events) {
         .replace(/&#39;|&apos;/gi, "'")
         .replace(/\s+/g, " ")
         .trim()
-        .slice(0, 3000);
+        .slice(0, 6000);
 
       return { ...e, details };
-    } catch {
+    } catch (err) {
+      console.error("SEC filing detail error:", err.message);
       return e;
     }
   }));
