@@ -274,7 +274,10 @@ ${ev}`;
       }
     );
 
-    if (!r.ok) return null;
+if (!r.ok) {
+  console.error("Gemini API error:", r.status, await r.text());
+  return null;
+}
 
     const j = await r.json();
     const raw = j.candidates?.[0]?.content?.parts
@@ -290,9 +293,10 @@ ${ev}`;
           risks: o.risks.slice(0, 3).map(String)
         }
       : null;
-  } catch {
-    return null;
-  }
+} catch (err) {
+  console.error("Gemini aiWrite failed:", err);
+  return null;
+}
 }
 
 
