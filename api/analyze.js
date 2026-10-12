@@ -1,6 +1,6 @@
 // GET /api/analyze?ticker=AAPL
 // Quarter-by-quarter analysis from SEC EDGAR (10-Q / 10-K figures + 8-K announcements).
-// Env vars: SEC_USER_AGENT (required, e.g. "Plainvest you@example.com"), ANTHROPIC_API_KEY (optional).
+// Env vars: SEC_USER_AGENT (required), GEMINI_API_KEY (optional).
 
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
@@ -220,25 +220,82 @@ function eventsFrom(sub, cik) {
 }
 
 // Optional: have Claude write the story from the computed numbers and listed events only.
+
 async function aiWrite(name, out) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
+
   try {
     const m = v => (v == null ? "n/a" : money(v));
-    const qs = out.quarters.map(q => `Quarter ending ${q.end}: sales ${m(q.sales)}, vs year ago ${q.salesYoY == null ? "n/a" : (q.salesYoY * 100).toFixed(0) + "%"}, profit ${m(q.profit)}, cash ${m(q.cash)}`).join("\n");
-    const sg = out.signals.map(s => `${s.kind}: ${s.title}. ${s.text}`).join("\n") || "none";
-    const ev = out.events.map(e => `${e.date} ${e.kind}: ${e.title}`).join("\n") || "none";
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 700, messages: [{ role: "user", content:
-        `You explain public companies to beginners. Using ONLY the data below for ${name}, reply with JSON only: {"summary":"3 or 4 plain-English sentences telling the story of the last few quarters, naming the biggest good and bad changes","risks":["2 or 3 short risks tied to the data"]}. Use ONLY the data below: do not invent causes, products, news, or outside facts. No investment advice, no buy or sell language.\n\nQUARTERS (newest first):\n${qs}\n\nCHANGES IN THE NUMBERS:\n${sg}\n\nRECENT COMPANY ANNOUNCEMENTS (types only):\n${ev}` }] })
-    });
+
+    const qs = out.quarters.map(q =>
+      `Quarter ending ${q.end}: sales ${m(q.sales)}, vs year ago ${
+        q.salesYoY == null ? "n/a" : (q.salesYoY * 100).toFixed(0) + "%"
+      }, profit ${m(q.profit)}, cash ${m(q.cash)}`
+    ).join("\n");
+
+    const sg = out.signals.map(s =>
+      `${s.kind}: ${s.title}. ${s.text}`
+    ).join("\n") || "none";
+
+    const ev = out.events.map(e =>
+      `${e.date} ${e.kind}: ${e.title}`
+    ).join("\n") || "none";
+
+    const prompt = `You explain public companies to beginners.
+Using ONLY the data below for ${name}, reply with JSON only:
+{"summary":"3 or 4 plain-English sentences explaining recent changes","risks":["2 or 3 short risks tied to the data"]}.
+Do not invent causes, products, news, or outside facts.
+No investment advice or buy/sell language.
+
+QUARTERS (newest first):
+${qs}
+
+CHANGES IN THE NUMBERS:
+${sg}
+
+RECENT COMPANY ANNOUNCEMENTS:
+${ev}`;
+
+    const r = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": key
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      }
+    );
+
+    if (!r.ok) return null;
+
     const j = await r.json();
-    const o = JSON.parse(j.content.map(b => b.text || "").join("").replace(/```json|```/g, "").trim());
-    return typeof o.summary === "string" && Array.isArray(o.risks) ? { summary: o.summary, risks: o.risks.slice(0, 3).map(String) } : null;
-  } catch { return null; }
+    const raw = j.candidates?.[0]?.content?.parts
+      ?.map(p => p.text || "").join("");
+
+    if (!raw) return null;
+
+    const o = JSON.parse(raw);
+
+    return typeof o.summary === "string" && Array.isArray(o.risks)
+      ? {
+          summary: o.summary,
+          risks: o.risks.slice(0, 3).map(String)
+        }
+      : null;
+  } catch {
+    return null;
+  }
 }
+
+
 
 const FOREIGN_MSG = "That looks like a stock listed on a non-US exchange (like Toronto, London, or Tokyo). Plainvest only covers US-listed companies for now. If the company also trades in the US, try its US ticker.";
 const ETF_MSG = "That looks like an ETF or fund. ETFs don't have sales or profits the way companies do, so Plainvest can't analyze them yet.";
