@@ -220,7 +220,7 @@ function eventsFrom(sub, cik) {
 }
 
 // Optional: have Claude write the story from the computed numbers and listed events only.
-async function aiWrite(name, out) {
+async function aiWrite(name, out, industry) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   try {
@@ -232,11 +232,11 @@ async function aiWrite(name, out) {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 700, messages: [{ role: "user", content:
-        `You explain public companies to beginners. Using ONLY the data below for ${name}, reply with JSON only: {"summary":"3 or 4 plain-English sentences telling the story of the last few quarters, naming the biggest good and bad changes","risks":["2 or 3 short risks tied to the data"]}. Do not invent causes, products, news, or outside facts. No investment advice, no buy or sell language.\n\nQUARTERS (newest first):\n${qs}\n\nCHANGES IN THE NUMBERS:\n${sg}\n\nRECENT COMPANY ANNOUNCEMENTS (types only):\n${ev}` }] })
+        `You explain public companies to beginners. Using ONLY the data below for ${name}, reply with JSON only: {"about":"one plain sentence on what the company does and sells","summary":"3 or 4 plain-English sentences telling the story of the last few quarters, naming the biggest good and bad changes","risks":["2 or 3 short risks tied to the data"]}. For "about" only, you may use general knowledge of what the company does if you are confident; otherwise describe its industry in general terms, with no numbers or opinions. For "summary" and "risks", use ONLY the data below: do not invent causes, products, news, or outside facts. No investment advice, no buy or sell language.\n\nSEC INDUSTRY LABEL: ${industry || "unknown"}\n\nQUARTERS (newest first):\n${qs}\n\nCHANGES IN THE NUMBERS:\n${sg}\n\nRECENT COMPANY ANNOUNCEMENTS (types only):\n${ev}` }] })
     });
     const j = await r.json();
     const o = JSON.parse(j.content.map(b => b.text || "").join("").replace(/```json|```/g, "").trim());
-    return typeof o.summary === "string" && Array.isArray(o.risks) ? { summary: o.summary, risks: o.risks.slice(0, 3).map(String) } : null;
+    return typeof o.summary === "string" && Array.isArray(o.risks) ? { summary: o.summary, risks: o.risks.slice(0, 3).map(String), about: typeof o.about === "string" ? o.about.slice(0, 300) : undefined } : null;
   } catch { return null; }
 }
 
@@ -256,12 +256,14 @@ async function handler(req, res) {
     if (!r.ok) throw new HttpError(502, "The SEC didn't respond. Try again shortly.");
     const out = analyzeFacts(await r.json());
     if (!out) throw new HttpError(422, `${e.title} doesn't have enough quarterly reports in a format this version can read (often foreign or newly listed companies).`);
-    let events = [];
-    try { if (sr && sr.ok) events = eventsFrom(await sr.json(), e.cik_str); } catch {}
+    let events = [], sub = null;
+    try { if (sr && sr.ok) { sub = await sr.json(); events = eventsFrom(sub, e.cik_str); } } catch {}
     out.events = events;
-    const ai = await aiWrite(e.title, out);
+    const industry = sub?.sicDescription || null;
+    const ai = await aiWrite(e.title, out, industry);
+    const about = ai?.about || (industry ? `${e.title} operates in the "${industry}" industry, according to its SEC registration.` : null);
     res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
-    res.status(200).json({ ticker: t, name: e.title, ...out, ...(ai || {}) });
+    res.status(200).json({ ticker: t, name: e.title, industry, exchange: sub?.exchanges?.[0] || null, ...out, ...(ai || {}), about, aboutByAI: !!ai?.about });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.status ? err.message : "Something went wrong. Try again." });
   }
