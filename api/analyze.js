@@ -329,21 +329,49 @@ async function isFund(t) {
 }
 
 
-async function addEventDetails(events) {
+
+async function addEventDetails(events, cik) {
   return Promise.all(events.map(async e => {
     if (!e.url) return e;
 
     try {
-      const r = await fetch(e.url, {
+      const match = e.url.match(/\/Archives\/edgar\/data\/\d+\/(\d+)\//);
+      if (!match) return e;
+
+      const accession = match[1];
+      const indexUrl =
+        `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession}/index.json`;
+
+      const r = await fetch(indexUrl, {
         headers: {
           "User-Agent": UA(),
-          Accept: "text/html"
+          Accept: "application/json"
         }
       });
       if (!r.ok) return e;
 
-      const html = await r.text();
-      const details = html
+      const index = await r.json();
+      const files = index.directory?.item || [];
+
+      const submission = files.find(f =>
+        f.name?.toLowerCase().endsWith(".txt")
+      );
+
+      if (!submission) return e;
+
+      const txtUrl =
+        `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession}/${submission.name}`;
+
+      const tr = await fetch(txtUrl, {
+        headers: {
+          "User-Agent": UA(),
+          Accept: "text/plain"
+        }
+      });
+      if (!tr.ok) return e;
+
+      const fullText = await tr.text();
+      const details = fullText
         .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
         .replace(/<[^>]+>/g, " ")
@@ -362,6 +390,7 @@ async function addEventDetails(events) {
     }
   }));
 }
+
 
 async function handler(req, res) {
   try {
@@ -393,7 +422,7 @@ async function handler(req, res) {
     if (!r.ok) throw new HttpError(502, "The SEC didn't respond. Try again shortly.");
     const out = analyzeFacts(await r.json());
     if (!out) throw cant();
-out.events = await addEventDetails(eventsFrom(sub, e.cik_str));
+out.events = await addEventDetails(eventsFrom(sub, e.cik_str), e.cik_str);
     const ai = await aiWrite(e.title, out);
     res.setHeader("Cache-Control", "s-maxage=604800, stale-while-revalidate=2592000");
     res.status(200).json({ ticker: t, name: e.title, ...out, ...(ai || {}) });
