@@ -220,7 +220,7 @@ function eventsFrom(sub, cik) {
 }
 
 // Optional: have Claude write the story from the computed numbers and listed events only.
-async function aiWrite(name, out, industry) {
+async function aiWrite(name, out) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   try {
@@ -232,38 +232,71 @@ async function aiWrite(name, out, industry) {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 700, messages: [{ role: "user", content:
-        `You explain public companies to beginners. Using ONLY the data below for ${name}, reply with JSON only: {"about":"one plain sentence on what the company does and sells","summary":"3 or 4 plain-English sentences telling the story of the last few quarters, naming the biggest good and bad changes","risks":["2 or 3 short risks tied to the data"]}. For "about" only, you may use general knowledge of what the company does if you are confident; otherwise describe its industry in general terms, with no numbers or opinions. For "summary" and "risks", use ONLY the data below: do not invent causes, products, news, or outside facts. No investment advice, no buy or sell language.\n\nSEC INDUSTRY LABEL: ${industry || "unknown"}\n\nQUARTERS (newest first):\n${qs}\n\nCHANGES IN THE NUMBERS:\n${sg}\n\nRECENT COMPANY ANNOUNCEMENTS (types only):\n${ev}` }] })
+        `You explain public companies to beginners. Using ONLY the data below for ${name}, reply with JSON only: {"summary":"3 or 4 plain-English sentences telling the story of the last few quarters, naming the biggest good and bad changes","risks":["2 or 3 short risks tied to the data"]}. Use ONLY the data below: do not invent causes, products, news, or outside facts. No investment advice, no buy or sell language.\n\nQUARTERS (newest first):\n${qs}\n\nCHANGES IN THE NUMBERS:\n${sg}\n\nRECENT COMPANY ANNOUNCEMENTS (types only):\n${ev}` }] })
     });
     const j = await r.json();
     const o = JSON.parse(j.content.map(b => b.text || "").join("").replace(/```json|```/g, "").trim());
-    return typeof o.summary === "string" && Array.isArray(o.risks) ? { summary: o.summary, risks: o.risks.slice(0, 3).map(String), about: typeof o.about === "string" ? o.about.slice(0, 300) : undefined } : null;
+    return typeof o.summary === "string" && Array.isArray(o.risks) ? { summary: o.summary, risks: o.risks.slice(0, 3).map(String) } : null;
   } catch { return null; }
+}
+
+const FOREIGN_MSG = "That looks like a stock listed on a non-US exchange (like Toronto, London, or Tokyo). Plainvest only covers US-listed companies for now. If the company also trades in the US, try its US ticker.";
+const ETF_MSG = "That looks like an ETF or fund. ETFs don't have sales or profits the way companies do, so Plainvest can't analyze them yet.";
+// Tickers with an exchange suffix (SHOP.TO, BP.L, 7203.T) or prefix (TSX:SHOP).
+const FOREIGN = /^[A-Z0-9]{1,6}[.:](TO|V|NE|CN|L|T|HK|AX|NZ|SI|SW|PA|DE|F|MI|MC|AS|ST|OL|HE|CO|SS|SZ|KS|KQ|NS|BO|SA|MX|TW|JK|BK|KL|TA|IR)$|^(TSX|TSXV|TSE|LSE|LON|ASX|HKEX|SGX|FRA|EPA|NSE|BSE|TYO|SHA|SHE|KRX|BME|SWX|AMS)[:.]/;
+// Popular ETFs, plus the SEC's list of funds (checked below).
+const ETFS = new Set(("SPY QQQ VOO VTI IVV DIA IWM VT VEA VWO VXUS BND AGG GLD IAU SLV XLK XLF XLE XLV XLY XLP XLI XLU XLB XLRE XLC ARKK ARKG ARKW SCHD SCHB SCHX SCHG " +
+  "VUG VTV VIG VYM VGT VHT VNQ IJH IJR IJK MDY EFA IEFA IEMG EEM TLT IEF SHY HYG LQD JNK USO UNG SMH SOXX SOXL TQQQ SQQQ UPRO SPXL SPXS TNA TZA IVW IVE IWF IWD IWB IWV " +
+  "QQQM SPLG SPYG SPYV RSP QUAL USMV DGRO DVY SDY JEPI JEPQ BITO IBIT FBTC GBTC ETHE XBI IBB KRE KBE XOP OIH GDX GDXJ ITB XHB VXX UVXY").split(" "));
+let fundSet = null, fundAt = 0;
+async function isFund(t) {
+  if (ETFS.has(t)) return true;
+  try {
+    if (!fundSet || Date.now() - fundAt > 7 * DAY) {
+      const r = await fetch("https://www.sec.gov/files/company_tickers_mf.json", { headers: H() });
+      if (!r.ok) return false;
+      const j = await r.json(), i = j.fields?.indexOf("symbol");
+      fundSet = new Set(i >= 0 ? (j.data || []).map(row => String(row[i]).toUpperCase()) : []);
+      fundAt = Date.now();
+    }
+    return fundSet.has(t);
+  } catch { return false; }
 }
 
 async function handler(req, res) {
   try {
     if (!UA()) throw new HttpError(500, "Server setup incomplete: SEC_USER_AGENT is missing.");
-    const t = String(req.query?.ticker || "").trim().toUpperCase().replace(".", "-");
+    const raw = String(req.query?.ticker || "").trim().toUpperCase();
+    if (FOREIGN.test(raw)) throw new HttpError(422, FOREIGN_MSG);
+    const t = raw.replace(".", "-");
     if (!/^[A-Z0-9-]{1,8}$/.test(t)) throw new HttpError(400, "Enter a valid ticker, like AAPL.");
+    if (ETFS.has(t)) throw new HttpError(422, ETF_MSG);
     const e = await lookup(t);
-    if (!e) throw new HttpError(404, `No US-listed company found for ${t}.`);
+    if (!e) {
+      if (await isFund(t)) throw new HttpError(422, ETF_MSG);
+      throw new HttpError(404, `No US-listed company found for ${t}. Plainvest covers US-listed companies only, so check the ticker. ETFs and non-US stocks aren't supported yet.`);
+    }
     const cik = String(e.cik_str).padStart(10, "0");
     const [r, sr] = await Promise.all([
       fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, { headers: H() }),
       fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: H() }).catch(() => null)
     ]);
-    if (r.status === 404) throw new HttpError(422, `${e.title} doesn't have standard US filings to analyze.`);
+    let sub = null;
+    try { if (sr && sr.ok) sub = await sr.json(); } catch {}
+    const cant = () => {
+      const forms = new Set(sub?.filings?.recent?.form || []);
+      if (forms.has("20-F") || forms.has("40-F")) return new HttpError(422, `${e.title} is a foreign company that files different reports with the SEC (20-F or 40-F), which Plainvest can't read yet. Companies that file standard US reports, like AAPL, work.`);
+      if (/\b(ETF|FUND|INDEX|ISHARES|SPDR|PROSHARES)\b/i.test(e.title)) return new HttpError(422, ETF_MSG);
+      return new HttpError(422, `${e.title} doesn't have enough quarterly reports in a format this version can read (often newly listed or unusual companies).`);
+    };
+    if (r.status === 404) throw cant();
     if (!r.ok) throw new HttpError(502, "The SEC didn't respond. Try again shortly.");
     const out = analyzeFacts(await r.json());
-    if (!out) throw new HttpError(422, `${e.title} doesn't have enough quarterly reports in a format this version can read (often foreign or newly listed companies).`);
-    let events = [], sub = null;
-    try { if (sr && sr.ok) { sub = await sr.json(); events = eventsFrom(sub, e.cik_str); } } catch {}
-    out.events = events;
-    const industry = sub?.sicDescription || null;
-    const ai = await aiWrite(e.title, out, industry);
-    const about = ai?.about || (industry ? `${e.title} operates in the "${industry}" industry, according to its SEC registration.` : null);
-    res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
-    res.status(200).json({ ticker: t, name: e.title, industry, exchange: sub?.exchanges?.[0] || null, ...out, ...(ai || {}), about, aboutByAI: !!ai?.about });
+    if (!out) throw cant();
+    out.events = eventsFrom(sub, e.cik_str);
+    const ai = await aiWrite(e.title, out);
+    res.setHeader("Cache-Control", "s-maxage=604800, stale-while-revalidate=2592000");
+    res.status(200).json({ ticker: t, name: e.title, ...out, ...(ai || {}) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.status ? err.message : "Something went wrong. Try again." });
   }
