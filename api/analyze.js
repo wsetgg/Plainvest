@@ -275,10 +275,13 @@ ${ev}`;
       }
     );
 
+
 if (!r.ok) {
-  console.error("Gemini API error:", r.status, await r.text());
+  const errorText = await r.text();
+  console.error("Gemini API error:", r.status, errorText);
   return null;
 }
+
 
     const j = await r.json();
     const raw = j.candidates?.[0]?.content?.parts
