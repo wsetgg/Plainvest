@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,6 +45,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-of
 .pill{font-size:14px;font-weight:700;padding:3px 10px;border-radius:99px;white-space:nowrap}
 .na{background:var(--bg);color:var(--mute)}.good{background:var(--goodbg);color:var(--good)}.warn{background:var(--warnbg);color:var(--warn)}.bad{background:var(--badbg);color:var(--bad)}
 .check p{margin:0}
+.event-explanation{margin-top:8px;display:grid;gap:8px}
+.event-explanation p{margin:0}
+.event-explanation strong{color:var(--ink)}
+.event-details{margin-top:8px;font-size:14px}
+.event-details summary{color:var(--acc);cursor:pointer}
 .risks{border-top:1px solid var(--line);padding-top:16px}
 .risks h3{font-size:19px;margin-bottom:6px}
 .risks ul{margin:0;padding-left:20px}
@@ -104,6 +110,13 @@ const sg=v=>v==null?"":v<0?"neg":"pos";
 const qn=e=>new Date(e+"T00:00:00Z").toLocaleString("en-US",{month:"short",year:"numeric",timeZone:"UTC"});
 const card=(t,kind,body)=>`<div class="check"><div class="ctop"><h3>${esc(t)}</h3><span class="pill ${kind[0]}">${kind[1]}</span></div>${body}</div>`;
 const busy=b=>{$("go").disabled=b;document.querySelectorAll(".chip").forEach(x=>x.disabled=b)};
+
+function eventField(e,key){
+ const x=e.explanation;
+ const v=(x&&typeof x==="object"?x[key]:null)??e[key];
+ return typeof v==="string"?v.trim():"";
+}
+
 async function run(k){
  k=(k||$("t").value).trim().toUpperCase();
  const r=$("result"),m=$("msg");m.textContent="";r.innerHTML="";
@@ -121,17 +134,48 @@ async function run(k){
   m.textContent="";
   const qs=(d.quarters||[]).map(q=>`<tr><td>${qn(q.end)}</td><td>${mn(q.sales)}</td><td class="${sg(q.salesYoY)}">${pc(q.salesYoY)}</td><td class="${sg(q.profit)}">${mn(q.profit)}</td><td>${q.margin==null?"–":(q.margin*100).toFixed(1)+"%"}</td><td class="${sg(q.cash)}">${mn(q.cash)}</td></tr>`).join("");
   const sig=(d.signals||[]).map(s=>card(s.title,K[s.kind]||K.event,`<p>${esc(s.text)}</p>`)).join("")||`<p class="jargon">No big swings stood out in the latest quarter's numbers.</p>`;
-  const ev=(d.events||[]).map(e=>card(e.title,K[e.kind]||K.event,`<p class="jargon">${esc(e.date)}${e.url&&e.url.startsWith("https://www.sec.gov/")?` · <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`:""}</p>`)).join("")||`<p class="jargon">No notable announcements in the past year.</p>`;
+
+  const ev=(d.events||[]).map(e=>{
+    const what=eventField(e,"whatHappened");
+    const why=eventField(e,"whyItMatters");
+    const impact=eventField(e,"potentialImpact");
+    const uncertain=eventField(e,"uncertainty");
+    const details=typeof e.details==="string"?e.details.trim():"";
+    const date=e.date?`<span>${esc(e.date)}</span>`:"";
+    const link=e.url&&e.url.startsWith("https://www.sec.gov/")
+      ?` · <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
+      :"";
+
+    const explanation=`
+      <div class="event-explanation">
+        ${what?`<p><strong>What happened:</strong> ${esc(what)}</p>`:""}
+        ${why?`<p><strong>Why it matters:</strong> ${esc(why)}</p>`:""}
+        ${impact?`<p><strong>Potential impact:</strong> ${esc(impact)}</p>`:""}
+        ${uncertain?`<p><strong>What's uncertain:</strong> ${esc(uncertain)}</p>`:""}
+        ${!what&&!why&&!impact&&!uncertain
+          ?`<p class="jargon">An explanation isn't available for this announcement yet.</p>`
+          :""}
+      </div>
+      ${details?`<details class="event-details"><summary>Additional filing details</summary><p>${esc(details)}</p></details>`:""}
+    `;
+
+    return card(
+      e.title||"Company announcement",
+      K[e.kind]||K.event,
+      `${date?`<p class="jargon">${date}${link}</p>`:""}${explanation}`
+    );
+  }).join("")||`<p class="jargon">No notable announcements in the past year.</p>`;
+
   r.innerHTML=`<div class="head"><h2>${esc(d.name)} (${esc(d.ticker)})</h2><span class="tag">${esc(d.periodLabel||"")}</span></div>
   <p class="summary">${esc(d.summary)}</p>
   <h3 class="sec">Quarter by quarter</h3>
   <div class="tw"><table class="qt"><thead><tr><th>Quarter</th><th>Sales</th><th>vs year ago</th><th>Profit</th><th>Margin</th><th>Cash</th></tr></thead><tbody>${qs}</tbody></table></div>
   <h3 class="sec">What changed in the numbers</h3>${sig}
   <h3 class="sec">Recent company announcements</h3>${ev}
-  <p class="note">These come from the reported numbers and the types of announcements filed with the SEC. They don't include news, analyst views, or upcoming events.</p>
+  <p class="note">These announcements are based on company filings with the SEC. Explanations describe why an announcement may matter, not a guaranteed outcome for the stock. They may not include news, analyst views, or upcoming events.</p>
   <h3 class="sec">Four quick checks (latest quarter)</h3>`+
-  d.checks.map(c=>`<div class="check"><div class="ctop"><h3>${esc(c.title)}</h3><span class="pill ${c.status}">${L[c.status]}</span></div><span class="jargon">Technical name: ${esc(c.jargon)}</span><p>${esc(c.text)}</p></div>`).join("")+
-  `<div class="risks"><h3>What could go wrong</h3><ul>${d.risks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
+  (d.checks||[]).map(c=>`<div class="check"><div class="ctop"><h3>${esc(c.title)}</h3><span class="pill ${esc(c.status)}">${L[c.status]||L.na}</span></div><span class="jargon">Technical name: ${esc(c.jargon)}</span><p>${esc(c.text)}</p></div>`).join("")+
+  `<div class="risks"><h3>What could go wrong</h3><ul>${(d.risks||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
   <p class="note">Based on the company's quarterly filings with the SEC. Education only, not investment advice.</p>`;
  }catch(e){r.innerHTML="";m.style.color="var(--bad)";m.textContent="Couldn't reach the server. Try again."}finally{clearInterval(tm);busy(false)}
 }
