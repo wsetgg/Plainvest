@@ -238,9 +238,10 @@ async function aiWrite(name, out) {
       `${s.kind}: ${s.title}. ${s.text}`
     ).join("\n") || "none";
 
-    const ev = out.events.map(e =>
-      `${e.date} ${e.kind}: ${e.title}`
-    ).join("\n") || "none";
+const ev = out.events.map(e =>
+  `${e.date} ${e.kind}: ${e.title}. Details: ${e.details || "Filing details unavailable"}`
+).join("\n") || "none";
+
 
     const prompt = `You explain public companies to beginners.
 Using ONLY the data below for ${name}, reply with JSON only:
@@ -324,6 +325,34 @@ async function isFund(t) {
   } catch { return false; }
 }
 
+async function addEventDetails(events) {
+  return Promise.all(events.map(async e => {
+    if (!e.url) return e;
+
+    try {
+      const r = await fetch(e.url, { headers: H() });
+      if (!r.ok) return e;
+
+      const html = await r.text();
+      const details = html
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;|&#160;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 3000);
+
+      return { ...e, details };
+    } catch {
+      return e;
+    }
+  }));
+}
+
 async function handler(req, res) {
   try {
     if (!UA()) throw new HttpError(500, "Server setup incomplete: SEC_USER_AGENT is missing.");
@@ -354,7 +383,7 @@ async function handler(req, res) {
     if (!r.ok) throw new HttpError(502, "The SEC didn't respond. Try again shortly.");
     const out = analyzeFacts(await r.json());
     if (!out) throw cant();
-    out.events = eventsFrom(sub, e.cik_str);
+out.events = await addEventDetails(eventsFrom(sub, e.cik_str));
     const ai = await aiWrite(e.title, out);
     res.setHeader("Cache-Control", "s-maxage=604800, stale-while-revalidate=2592000");
     res.status(200).json({ ticker: t, name: e.title, ...out, ...(ai || {}) });
