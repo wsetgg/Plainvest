@@ -587,13 +587,19 @@ ${ev}`;
   }
 }
 
-const FOREIGN_MSG = "That looks like a stock listed on a non-US exchange (like Toronto, London, or Tokyo). Plainvest only covers US-listed companies for now. If the company also trades in the US, try its US ticker.";
-
-const ETF_MSG = "That looks like an ETF or fund. ETFs don't have sales or profits the way companies do, so Plainvest can't analyze them yet.";
-
-// Tickers with an exchange suffix (SHOP.TO, BP.L, 7203.T) or prefix (TSX:SHOP).
-const FOREIGN = /^[A-Z0-9]{1,6}[.:](TO|V|NE|CN|L|T|HK|AX|NZ|SI|SW|PA|DE|F|MI|MC|AS|ST|OL|HE|CO|SS|SZ|KS|KQ|NS|BO|SA|MX|TW|JK|BK|KL|TA|IR)$|^(TSX|TSXV|TSE|LSE|LON|ASX|HKEX|SGX|FRA|EPA|NSE|BSE|TYO|SHA|SHE|KRX|BME|SWX|AMS)[:.]/;
+// Tickers with an exchange suffix (SHOP.TO, BP.L, 7203.T)
+// or prefix (TSX:SHOP).
+const FOREIGN =
+  /^[A-Z0-9]{1,6}[.:](TO|V|NE|CN|L|T|HK|AX|NZ|SI|SW|PA|DE|F|MI|MC|AS|ST|OL|HE|CO|SS|SZ|KS|KQ|NS|BO|SA|MX|TW|JK|BK|KL|TA|IR)$|^(TSX|TSXV|TSE|LSE|LON|ASX|HKEX|SGX|FRA|EPA|NSE|BSE|TYO|SHA|SHE|KRX|BME|SWX|AMS)[:.]/;
 
 // Popular ETFs, plus the SEC's list of funds (checked below).
-const ETFS = new Set((
-  "SPY QQQ VOO VTI IVV DIA IWM VT V
+const ETFS = new Set(
+  (
+    "SPY QQQ VOO VTI IVV DIA IWM VT VEA VWO " +
+    "BND AGG TLT IEF SHY GLD SLV USO UNG " +
+    "XLK XLF XLE XLV XLI XLY XLP XLU XLRE " +
+    "ARKK ARKG HYG LQD EEM EFA SCHD JEPI JEPQ"
+  )
+    .toUpperCase()
+    .split(/\s+/)
+);
