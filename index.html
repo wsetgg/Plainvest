@@ -245,7 +245,10 @@ async function run(k){
   }
 
   if(!res.ok){
-   if(res.status===404||res.status===422){
+   if(res.status===429){
+    m.textContent="";
+    r.innerHTML=`<p class="note">${esc(d.error||"You've reached today's limit of 3 company analyses. Your limit resets at midnight UTC.")}</p>`;
+   }else if(res.status===404||res.status===422){
     m.textContent="";
     r.innerHTML=`<p class="note">${esc(d.error||"Company not found.")} Try a US company like AAPL, KO, or TSLA.</p>`;
    }else{
