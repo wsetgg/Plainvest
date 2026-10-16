@@ -2,6 +2,7 @@
  // GET /api/analyze?ticker=AAPL
 // Quarter-by-quarter analysis from SEC EDGAR (10-Q / 10-K figures + 8-K announcements).
 // Env vars: SEC_USER_AGENT (required), GEMINI_API_KEY (optional).
+process.traceDeprecation = true;
 
 class HttpError extends Error {
   constructor(status, msg) {
