@@ -1,524 +1,582 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Plainvest: stocks explained in plain English</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-:root{--bg:#f2f5f7;--card:#fff;--ink:#12202b;--mute:#566673;--line:#d8e0e6;--acc:#0e6f8f;--acc-ink:#fff;--good:#1f6b43;--goodbg:#e1f2e8;--warn:#85590c;--warnbg:#faefd6;--bad:#8f2433;--badbg:#f9e1e5;--sales:#2583dc;--profit:#23945b}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24;--sales:#58aaff;--profit:#65d99a}}
-:root[data-theme="dark"]{--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24;--sales:#58aaff;--profit:#65d99a}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 "DM Sans",system-ui,sans-serif;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.wrap{max-width:860px;margin:0 auto;padding:0 20px}
-h1,h2,h3{font-family:"Bricolage Grotesque","DM Sans",system-ui,sans-serif;line-height:1.15;margin:0}
-nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
-.logo{font:700 22px "Bricolage Grotesque",sans-serif;color:var(--acc)}
-.nav-note{color:var(--mute);font-size:14px}
-header.hero{padding:28px 0 32px}
-h1{font-size:clamp(34px,7vw,58px);letter-spacing:-.02em;max-width:14ch}
-.sub{color:var(--mute);max-width:52ch;margin:16px 0 28px;font-size:18px}
-.demo{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
-.demo label{font-weight:700;display:block;margin-bottom:8px}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-input{flex:1;min-width:140px;font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);text-transform:uppercase}
-button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 18px;background:var(--acc);color:var(--acc-ink);cursor:pointer}
-button.chip{background:transparent;color:var(--ink);border:1px solid var(--line);padding:8px 12px;font-weight:500}
-button.chip:hover,button.chip[aria-pressed="true"]{border-color:var(--acc);color:var(--acc)}
-button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
-.chips{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mute);font-size:14px}
-#msg{margin:12px 0 0;color:var(--bad);font-size:15px;min-height:1px}
-#result{margin-top:20px}
-.head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px}
-.head h2{font-size:28px}
-.tag{color:var(--mute);font-size:15px}
-.summary{font-size:19px;margin:12px 0 12px;padding-left:14px;border-left:4px solid var(--acc)}
-.about{font-size:17px;margin:12px 0 22px;color:var(--mute);line-height:1.7}
-.check{display:grid;grid-template-columns:1fr;gap:6px;padding:16px 0;border-top:1px solid var(--line)}
-.ctop{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
-.ctop h3{font-size:19px}
-.jargon{color:var(--mute);font-size:13px}
-.pill{font-size:14px;font-weight:700;padding:3px 10px;border-radius:99px;white-space:nowrap}
-.na{background:var(--bg);color:var(--mute)}
-.good{background:var(--goodbg);color:var(--good)}
-.warn{background:var(--warnbg);color:var(--warn)}
-.bad{background:var(--badbg);color:var(--bad)}
-.check p{margin:0}
-.event-explanation{margin-top:8px;display:grid;gap:8px}
-.event-explanation p{margin:0}
-.event-explanation strong{color:var(--ink)}
-.event-details{margin-top:8px;font-size:14px}
-.event-details summary{color:var(--acc);cursor:pointer}
-.risks{border-top:1px solid var(--line);padding-top:16px}
-.risks h3{font-size:19px;margin-bottom:6px}
-.risks ul{margin:0;padding-left:20px}
-.note{margin-top:18px;font-size:14px;color:var(--mute);background:var(--bg);border-radius:10px;padding:12px 14px}
-section.how{padding:44px 0 20px}
-section.how h2{font-size:30px;margin-bottom:16px}
-.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
-.cols h3{font-size:19px;margin-bottom:6px}
-.cols p{margin:0;color:var(--mute)}
-footer{padding:32px 0 48px;color:var(--mute);font-size:14px;border-top:1px solid var(--line);margin-top:36px}
-.sec{font-size:20px;margin:24px 0 4px}
-.tw{overflow-x:auto;max-width:100%}
-.qt{border-collapse:collapse;width:100%;font-size:15px;white-space:nowrap}
-.qt th,.qt td{text-align:right;padding:8px 10px;border-top:1px solid var(--line)}
-.qt th:first-child,.qt td:first-child{text-align:left}
-.qt th{color:var(--mute);font-weight:500;font-size:13px;border-top:0}
-.pos{color:var(--good)}
-.neg{color:var(--bad)}
-a{color:var(--acc)}
-.loading{padding:8px 0}
-.loading p{margin:10px 0;color:var(--mute)}
-.spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%}
-.sk i{display:block;height:14px;border-radius:7px;background:var(--line);margin:10px 0}
-.sk i:nth-child(2){width:80%}
-.sk i:nth-child(3){width:60%}
-button:disabled{opacity:.6;cursor:wait}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f2f5f7">
+  <title>Plainvest: stocks explained in plain English</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 
-/* Quarterly revenue and profit chart */
-.chart-card{margin:12px 0 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px 12px}
-.chart-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.chart-top h3{font-size:18px}
-.chart-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mute)}
-.legend-item{display:inline-flex;align-items:center;gap:6px}
-.legend-dot{width:9px;height:9px;border-radius:3px;display:inline-block}
-.legend-sales{background:var(--sales)}
-.legend-profit{background:var(--profit)}
-.legend-loss{background:var(--bad)}
-.chart-scroll{overflow-x:auto;max-width:100%;padding-bottom:4px}
-.chart-svg{display:block;width:100%;min-width:560px;height:auto;overflow:visible}
-.chart-svg text{font-family:"DM Sans",system-ui,sans-serif;fill:var(--mute);font-size:11px}
-.chart-svg .grid-line{stroke:var(--line);stroke-width:1;stroke-dasharray:3 4}
-.chart-svg .zero-line{stroke:var(--mute);stroke-width:1.2}
-.chart-svg .sales-bar{fill:var(--sales)}
-.chart-svg .profit-bar{fill:var(--profit)}
-.chart-svg .loss-bar{fill:var(--bad)}
-.chart-svg rect{transition:opacity .15s ease}
-.chart-svg rect:hover{opacity:.72}
-.chart-caption{font-size:12px;color:var(--mute);margin:8px 2px 0}
-@media(max-width:540px){
- .chart-card{padding:13px 10px 10px}
- .chart-top{align-items:flex-start}
- .chart-legend{gap:10px}
-}
-@media (prefers-reduced-motion:no-preference){
-#result>*{animation:in .25s ease-out}
-.spin{animation:sp .8s linear infinite}
-.sk i{animation:pl 1.2s ease-in-out infinite alternate}
-@keyframes in{from{opacity:0}to{opacity:1}}
-@keyframes sp{to{transform:rotate(360deg)}}
-@keyframes pl{from{opacity:.4}to{opacity:1}}
-}
-</style>
+  <style>
+    :root {
+      --bg: #f2f5f7;
+      --card: #ffffff;
+      --ink: #12202b;
+      --mute: #566673;
+      --line: #d8e0e6;
+      --acc: #0e6f8f;
+      --acc-light: #d9edf5;
+      --good: #1f6b43;
+      --goodbg: #e1f2e8;
+      --warn: #85590c;
+      --warnbg: #faefd6;
+      --bad: #8f2433;
+      --badbg: #f9e1e5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0e171d;
+        --card: #16232c;
+        --ink: #e8eff3;
+        --mute: #9db0bc;
+        --line: #2a3b47;
+        --acc: #5cc3e0;
+        --acc-light: #193947;
+        --good: #7fdba5;
+        --goodbg: #173a28;
+        --warn: #f0c46a;
+        --warnbg: #3b2f14;
+        --bad: #f2a0ac;
+        --badbg: #411c24;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #0e171d;
+      --card: #16232c;
+      --ink: #e8eff3;
+      --mute: #9db0bc;
+      --line: #2a3b47;
+      --acc: #5cc3e0;
+      --acc-light: #193947;
+      --good: #7fdba5;
+      --goodbg: #173a28;
+      --warn: #f0c46a;
+      --warnbg: #3b2f14;
+      --bad: #f2a0ac;
+      --badbg: #411c24;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-padding-top: 20px;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.6 "DM Sans", system-ui, sans-serif;
+    }
+
+    .wrap {
+      width: min(100% - 32px, 920px);
+      margin: 0 auto;
+    }
+
+    h1, h2, h3 {
+      font-family: "Bricolage Grotesque", "DM Sans", sans-serif;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 0;
+    }
+
+    .logo {
+      color: var(--acc);
+      font: 700 24px "Bricolage Grotesque", sans-serif;
+    }
+
+    .nav-note, .tag {
+      color: var(--mute);
+      font-size: 14px;
+    }
+
+    .hero { padding: 30px 0 36px; }
+
+    h1 {
+      font-size: clamp(36px, 7vw, 58px);
+      letter-spacing: -1.5px;
+      max-width: 15ch;
+    }
+
+    .sub {
+      color: var(--mute);
+      max-width: 56ch;
+      margin: 16px 0 28px;
+      font-size: 18px;
+    }
+
+    .demo, .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .demo label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .row {
+      display: flex;
+      gap: 9px;
+      flex-wrap: wrap;
+    }
+
+    input {
+      flex: 1;
+      min-width: 130px;
+      font: inherit;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--ink);
+      text-transform: uppercase;
+    }
+
+    button {
+      font: inherit;
+      font-weight: 700;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 18px;
+      background: var(--acc);
+      color: white;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid var(--acc);
+      outline-offset: 3px;
+    }
+
+    button.chip {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 7px 12px;
+      font-weight: 500;
+    }
+
+    button.chip:hover {
+      border-color: var(--acc);
+      color: var(--acc);
+    }
+
+    .chips {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      color: var(--mute);
+      font-size: 14px;
+    }
+
+    #msg {
+      color: var(--bad);
+      font-size: 14px;
+      margin: 12px 0 0;
+      overflow-wrap: anywhere;
+    }
+
+    #result { margin-top: 22px; }
+
+    .head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+
+    .head h2 { font-size: clamp(23px, 4vw, 30px); }
+
+    .about {
+      font-size: 16px;
+      color: var(--mute);
+      margin: 10px 0;
+    }
+
+    .summary {
+      font-size: 18px;
+      margin: 14px 0 22px;
+      padding-left: 14px;
+      border-left: 4px solid var(--acc);
+    }
+
+    .sec {
+      font-size: 23px;
+      margin: 30px 0 6px;
+    }
+
+    .section-intro {
+      color: var(--mute);
+      font-size: 14px;
+      margin: 4px 0 14px;
+    }
+
+    .chart-card {
+      margin-top: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--card);
+      overflow: hidden;
+    }
+
+    .chart-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chart-heading h3 { font-size: 19px; }
+
+    .chart-heading span {
+      color: var(--mute);
+      font-size: 13px;
+    }
+
+    .chart-scroll {
+      overflow-x: auto;
+      padding-bottom: 6px;
+    }
+
+    .chart-bars {
+      display: flex;
+      gap: 8px;
+      min-width: 480px;
+      margin-top: 12px;
+    }
+
+    .chart-col {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .chart-value {
+      font-size: 11px;
+      color: var(--mute);
+      min-height: 20px;
+      white-space: nowrap;
+    }
+
+    .bar-area {
+      height: 150px;
+      position: relative;
+      margin: 4px 0 8px;
+    }
+
+    .bar {
+      position: absolute;
+      width: min(66%, 42px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--acc);
+      border-radius: 7px 7px 3px 3px;
+      min-height: 2px;
+      transition: height .25s ease, top .25s ease;
+    }
+
+    .bar.profit-negative {
+      border-radius: 3px 3px 7px 7px;
+      background: var(--bad);
+    }
+
+    .bar.profit-positive { background: var(--acc); }
+
+    .zero-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--mute);
+      opacity: .65;
+    }
+
+    .quarter-label {
+      color: var(--mute);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      color: var(--mute);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 3px;
+      background: var(--acc);
+      display: inline-block;
+    }
+
+    .legend-dot.negative { background: var(--bad); }
+
+    .tw { overflow-x: auto; max-width: 100%; }
+
+    .qt {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .qt th, .qt td {
+      text-align: right;
+      padding: 10px;
+      border-top: 1px solid var(--line);
+    }
+
+    .qt th:first-child, .qt td:first-child { text-align: left; }
+    .qt th {
+      color: var(--mute);
+      font-size: 12px;
+      font-weight: 500;
+      border-top: 0;
+    }
+
+    .pos { color: var(--good); }
+    .neg { color: var(--bad); }
+
+    .check {
+      padding: 15px 0;
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 5px;
+    }
+
+    .ctop {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ctop h3 { font-size: 18px; }
+
+    .pill {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 99px;
+      white-space: nowrap;
+    }
+
+    .na { background: var(--bg); color: var(--mute); }
+    .good { background: var(--goodbg); color: var(--good); }
+    .warn { background: var(--warnbg); color: var(--warn); }
+    .bad { background: var(--badbg); color: var(--bad); }
+
+    .jargon {
+      color: var(--mute);
+      font-size: 13px;
+    }
+
+    .check p { margin: 0; }
+
+    .event-explanation {
+      margin-top: 8px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .event-explanation p { margin: 0; }
+    .event-explanation strong { color: var(--ink); }
+
+    .event-details { margin-top: 8px; font-size: 14px; }
+    .event-details summary { color: var(--acc); cursor: pointer; }
+
+    .risks, .watch-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+
+    .risks h3, .watch-card h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .risks ul, .watch-card ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .watch-card { background: var(--acc-light); }
+    .watch-card li { margin: 7px 0; }
+
+    .note {
+      margin-top: 18px;
+      font-size: 13px;
+      color: var(--mute);
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .loading { padding: 12px 0; }
+    .loading p { color: var(--mute); }
+    .spin {
+      width: 28px;
+      height: 28px;
+      border: 3px solid var(--line);
+      border-top-color: var(--acc);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    .sk i {
+      display: block;
+      height: 13px;
+      border-radius: 7px;
+      background: var(--line);
+      margin: 10px 0;
+      animation: pulse 1.2s ease-in-out infinite alternate;
+    }
+
+    .sk i:nth-child(2) { width: 80%; }
+    .sk i:nth-child(3) { width: 60%; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { from { opacity: .4; } to { opacity: 1; } }
+
+    section.how { padding: 24px 0 36px; }
+    section.how h2 { font-size: 28px; margin-bottom: 16px; }
+
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 22px;
+    }
+
+    .cols h3 { font-size: 18px; margin-bottom: 6px; }
+    .cols p { color: var(--mute); margin: 0; }
+
+    footer {
+      padding: 26px 0 42px;
+      color: var(--mute);
+      font-size: 13px;
+      border-top: 1px solid var(--line);
+    }
+
+    a { color: var(--acc); }
+
+    @media (max-width: 520px) {
+      .wrap { width: min(100% - 22px, 920px); }
+      .demo, .panel { padding: 14px; }
+      .chart-card { padding: 12px; }
+      .summary { font-size: 16px; }
+      .chart-bars { min-width: 440px; gap: 5px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
 </head>
+
 <body>
-<div class="wrap">
-<nav><span class="logo">Plainvest</span><span class="nav-note">Beta</span></nav>
+  <div class="wrap">
+    <nav>
+      <span class="logo">Plainvest</span>
+      <span class="nav-note">Beta</span>
+    </nav>
 
-<header class="hero">
-<h1>Understand a stock before you buy it.</h1>
-<p class="sub">Type a ticker. Get a plain-English read on how the company makes money, whether it's profitable, how much it owes, and what could go wrong. No finance degree needed.</p>
+    <header class="hero">
+      <h1>Understand a stock before you buy it.</h1>
+      <p class="sub">
+        See how a company makes money, how its financials are changing,
+        and what could go wrong — explained in plain English.
+      </p>
 
-<div class="demo">
-<label for="t">Look up a US-listed company</label>
-<div class="row">
-<input id="t" maxlength="6" placeholder="e.g. AAPL" autocomplete="off" aria-describedby="msg">
-<button id="go">Explain it</button>
-</div>
+      <div class="demo">
+        <label for="t">Look up a US-listed company</label>
+        <div class="row">
+          <input id="t" maxlength="8" placeholder="e.g. AAPL"
+                 autocomplete="off" aria-describedby="msg">
+          <button id="go" type="button">Explain it</button>
+        </div>
 
-<div class="chips"><span>Try:</span>
-<button class="chip" data-t="AAPL">AAPL</button>
-<button class="chip" data-t="KO">KO</button>
-<button class="chip" data-t="TSLA">TSLA</button>
-</div>
+        <div class="chips">
+          <span>Try:</span>
+          <button class="chip" data-t="AAPL" type="button">AAPL</button>
+          <button class="chip" data-t="KO" type="button">KO</button>
+          <button class="chip" data-t="TSLA" type="button">TSLA</button>
+        </div>
 
-<p id="msg" role="status"></p>
-<div id="result" aria-live="polite"></div>
-</div>
-</header>
+        <p id="msg" role="status"></p>
+        <div id="result" aria-live="polite"></div>
+      </div>
+    </header>
 
-<section class="how">
-<h2>What you get</h2>
-<div class="cols">
-<div><h3>Jargon, translated</h3><p>Every number comes with its technical name and what it means for you.</p></div>
-<div><h3>Four quick checks</h3><p>Profit, debt, growth, and cash, each with a clear good, watch, or concern label.</p></div>
-<div><h3>Risks up front</h3><p>The biggest things that could hurt the company, stated plainly.</p></div>
-</div>
-</section>
+    <section class="how">
+      <h2>What you get</h2>
+      <div class="cols">
+        <div>
+          <h3>Financial trends</h3>
+          <p>Compare revenue and profit across recent quarters, including losses.</p>
+        </div>
+        <div>
+          <h3>Plain-English explanations</h3>
+          <p>Understand what changed, why it could matter, and what remains uncertain.</p>
+        </div>
+        <div>
+          <h3>Risks up front</h3>
+          <p>Review profit, debt, growth, cash flow, and the issues worth monitoring.</p>
+        </div>
+      </div>
+    </section>
 
-<footer>
-<p>Plainvest explains public company information for education. It does not give investment advice or tell you what to buy or sell. Figures come from public SEC filings and may lag recent events.</p>
-</footer>
-</div>
-
-<script>
-const $=id=>document.getElementById(id);
-
-const L={
- good:"Looks good",
- warn:"Watch this",
- bad:"Concern",
- na:"Not enough data"
-};
-
-const K={
- positive:["good","Positive"],
- negative:["bad","Negative"],
- watch:["warn","Watch"],
- event:["na","Event"]
-};
-
-const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({
- "&":"&amp;",
- "<":"&lt;",
- ">":"&gt;",
- '"':"&quot;"
-}[c]));
-
-const mn=v=>{
- if(v==null)return"–";
- const a=Math.abs(v),s=v<0?"-":"";
- return a>=1e9?s+"$"+(a/1e9).toFixed(1)+"B":
-        a>=1e6?s+"$"+(a/1e6).toFixed(0)+"M":
-        s+"$"+Math.round(a).toLocaleString("en-US");
-};
-
-const pc=x=>x==null?"–":(x>=0?"+":"")+(x*100).toFixed(0)+"%";
-const sg=v=>v==null?"":v<0?"neg":"pos";
-
-const qn=e=>new Date(e+"T00:00:00Z").toLocaleString("en-US",{
- month:"short",
- year:"numeric",
- timeZone:"UTC"
-});
-
-const card=(t,kind,body)=>`
-<div class="check">
- <div class="ctop">
-  <h3>${esc(t)}</h3>
-  <span class="pill ${kind[0]}">${kind[1]}</span>
- </div>
- ${body}
-</div>`;
-
-const busy=b=>{
- $("go").disabled=b;
- document.querySelectorAll(".chip").forEach(x=>x.disabled=b);
-};
-
-function eventField(e,key){
- const x=e.explanation;
- const v=(x&&typeof x==="object"?x[key]:null)??e[key];
- return typeof v==="string"?v.trim():"";
-}
-
-/*
- Draw an SVG bar chart from the same quarter data used by the table.
- Both series share a single scale. Positive profit rises from zero;
- losses extend below the zero line.
-*/
-function quarterlyChart(quarters){
- const data=(quarters||[])
-  .filter(q=>q&&q.end&&Number.isFinite(Number(q.sales)))
-  .slice(0,8)
-  .sort((a,b)=>a.end.localeCompare(b.end));
-
- if(!data.length)return"";
-
- const maxSales=Math.max(0,...data.map(q=>Number(q.sales)||0));
- const minValue=Math.min(0,...data.map(q=>q.profit==null?0:Number(q.profit)||0));
- const maxValue=Math.max(1,maxSales,...data.map(q=>q.profit==null?0:Number(q.profit)||0));
- const domainMin=minValue<0?minValue:0;
- const domainMax=maxValue||1;
- const range=domainMax-domainMin||1;
-
- const width=Math.max(560,data.length*76+48);
- const height=230;
- const left=12,right=12,top=12,bottom=34;
- const plotHeight=height-top-bottom;
- const plotWidth=width-left-right;
- const zeroY=top+(domainMax/range)*plotHeight;
- const step=plotWidth/data.length;
- const barWidth=Math.min(17,step*.27);
- const gap=Math.max(3,step*.06);
- const y=value=>top+((domainMax-value)/range)*plotHeight;
- const moneyFull=v=>{
-  if(v==null)return"No data";
-  const n=Number(v);
-  const a=Math.abs(n);
-  const sign=n<0?"-":"";
-  return a>=1e9?sign+"$"+(a/1e9).toFixed(2)+" billion":
-         a>=1e6?sign+"$"+(a/1e6).toFixed(2)+" million":
-         sign+"$"+Math.round(a).toLocaleString("en-US");
- };
-
- let grid="";
- for(let i=0;i<=4;i++){
-  const value=domainMax-(range*i/4);
-  const yy=y(value);
-  grid+=`<line class="grid-line" x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}"></line>`;
- }
- grid+=`<line class="zero-line" x1="${left}" y1="${zeroY}" x2="${width-right}" y2="${zeroY}"></line>`;
-
- let bars="";
- data.forEach((q,i)=>{
-  const center=left+step*(i+.5);
-  const sales=Number(q.sales)||0;
-  const profit=q.profit==null?null:Number(q.profit);
-  const salesX=center-gap/2-barWidth;
-  const profitX=center+gap/2;
-  const salesY=y(Math.max(0,sales));
-  const salesHeight=Math.max(0,zeroY-salesY);
-  const salesRounded=Math.min(5,barWidth/2,salesHeight/2);
-
-  bars+=`<rect class="sales-bar" x="${salesX}" y="${salesY}" width="${barWidth}" height="${salesHeight}" rx="${salesRounded}" ry="${salesRounded}"><title>${esc(qn(q.end))} revenue: ${esc(moneyFull(sales))}</title></rect>`;
-
-  if(profit!=null){
-   const profitY=y(profit);
-   const profitHeight=Math.max(0,Math.abs(zeroY-profitY));
-   const className=profit<0?"loss-bar":"profit-bar";
-   const rectY=profit<0?zeroY:profitY;
-   const round=Math.min(5,barWidth/2,profitHeight/2);
-   if(profitHeight>0.5){
-    bars+=`<rect class="${className}" x="${profitX}" y="${rectY}" width="${barWidth}" height="${profitHeight}" rx="${round}" ry="${round}"><title>${esc(qn(q.end))} profit/loss: ${esc(moneyFull(profit))}</title></rect>`;
-   }else{
-    bars+=`<rect class="${className}" x="${profitX}" y="${zeroY-1}" width="${barWidth}" height="2" rx="1"><title>${esc(qn(q.end))} profit/loss: ${esc(moneyFull(profit))}</title></rect>`;
-   }
-  }
-
-  const date=new Date(q.end+"T00:00:00Z");
-  const label=date.toLocaleString("en-US",{month:"short",year:"2-digit",timeZone:"UTC"});
-  bars+=`<text x="${center}" y="${height-10}" text-anchor="middle">${esc(label)}</text>`;
- });
-
- return`
- <div class="chart-card">
-  <div class="chart-top">
-   <h3>Revenue and profit</h3>
-   <div class="chart-legend">
-    <span class="legend-item"><i class="legend-dot legend-sales"></i>Revenue</span>
-    <span class="legend-item"><i class="legend-dot legend-profit"></i>Profit</span>
-    <span class="legend-item"><i class="legend-dot legend-loss"></i>Loss</span>
-   </div>
+    <footer>
+      <p>
+        Plainvest explains public company information for education. It does not
+        give investment advice or tell you what to buy or sell. Financial data
+        comes from SEC filings and may lag recent events.
+      </p>
+    </footer>
   </div>
-  <div class="chart-scroll">
-   <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Quarterly revenue and profit or loss bar chart. Hover over bars for exact values.">
-    ${grid}
-    ${bars}
-   </svg>
-  </div>
-  <p class="chart-caption">Quarters run oldest to newest. Bars share one scale; hover over a bar to see its exact value. A bar below the zero line represents a loss.</p>
- </div>`;
-}
 
-async function run(k){
- k=(k||$("t").value).trim().toUpperCase();
-
- const r=$("result"),m=$("msg");
- m.textContent="";
- m.style.color="var(--bad)";
- r.innerHTML="";
-
- if(!k){
-  m.textContent="Enter a ticker, like AAPL.";
-  return;
- }
-
- if($("go").disabled)return;
-
- $("t").value=k;
- m.style.color="var(--mute)";
-
- const msgs=[
-  "Finding the company...",
-  "Reading its quarterly reports...",
-  "Checking recent announcements...",
-  "Writing it up in plain English..."
- ];
-
- let i=0;
-
- r.innerHTML=`
- <div class="loading" role="status">
-  <div class="spin" aria-hidden="true"></div>
-  <p id="lm">${msgs[0]}</p>
-  <div class="sk" aria-hidden="true"><i></i><i></i><i></i></div>
- </div>`;
-
- const tm=setInterval(()=>{
-  i=Math.min(i+1,msgs.length-1);
-  const el=$("lm");
-  if(el)el.textContent=msgs[i];
- },2500);
-
- busy(true);
-
- try{
-  const res=await fetch("/api/analyze?ticker="+encodeURIComponent(k),{
-   cache:"no-store"
-  });
-
-  let d;
-  try{
-   d=await res.json();
-  }catch{
-   throw new Error("The server returned an invalid response.");
-  }
-
-  if(!res.ok){
-   if(res.status===429){
-    m.textContent="";
-    r.innerHTML=`<p class="note">${esc(d.error||"You've reached today's limit of 3 company analyses. Your limit resets at midnight UTC.")}</p>`;
-   }else if(res.status===404||res.status===422){
-    m.textContent="";
-    r.innerHTML=`<p class="note">${esc(d.error||"Company not found.")} Try a US company like AAPL, KO, or TSLA.</p>`;
-   }else{
-    r.innerHTML="";
-    m.style.color="var(--bad)";
-    m.textContent=d.error||"Something went wrong.";
-   }
-   return;
-  }
-
-  m.textContent="";
-
-  const quarterData=(d.quarters||[]);
-  const qs=quarterData.map(q=>`
-   <tr>
-    <td>${qn(q.end)}</td>
-    <td>${mn(q.sales)}</td>
-    <td class="${sg(q.salesYoY)}">${pc(q.salesYoY)}</td>
-    <td class="${sg(q.profit)}">${mn(q.profit)}</td>
-    <td>${q.margin==null?"–":(q.margin*100).toFixed(1)+"%"}</td>
-    <td class="${sg(q.cash)}">${mn(q.cash)}</td>
-   </tr>`).join("");
-
-  const chart=quarterlyChart(quarterData);
-
-  const sig=(d.signals||[]).map(s=>
-   card(s.title,K[s.kind]||K.event,`<p>${esc(s.text)}</p>`)
-  ).join("")||`<p class="jargon">No big swings stood out in the latest quarter's numbers.</p>`;
-
-  const ev=(d.events||[]).map(e=>{
-   const what=eventField(e,"whatHappened");
-   const why=eventField(e,"whyItMatters");
-   const impact=eventField(e,"potentialImpact");
-   const uncertain=eventField(e,"uncertainty");
-
-   const details=typeof e.details==="string"?e.details.trim():"";
-   const date=e.date?`<span>${esc(e.date)}</span>`:"";
-
-   const link=e.url&&e.url.startsWith("https://www.sec.gov/")
-    ?` · <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
-    :"";
-
-   const explanation=`
-    <div class="event-explanation">
-     ${what?`<p><strong>What happened:</strong> ${esc(what)}</p>`:""}
-     ${why?`<p><strong>Why it matters:</strong> ${esc(why)}</p>`:""}
-     ${impact?`<p><strong>Potential impact:</strong> ${esc(impact)}</p>`:""}
-     ${uncertain?`<p><strong>What's uncertain:</strong> ${esc(uncertain)}</p>`:""}
-     ${!what&&!why&&!impact&&!uncertain
-       ?`<p class="jargon">An explanation isn't available for this announcement yet.</p>`
-       :""}
-    </div>
-    ${details?`<details class="event-details"><summary>Additional filing details</summary><p>${esc(details)}</p></details>`:""}
-   `;
-
-   return card(
-    e.title||"Company announcement",
-    K[e.kind]||K.event,
-    `${date?`<p class="jargon">${date}${link}</p>`:""}${explanation}`
-   );
-  }).join("")||`<p class="jargon">No notable announcements in the past year.</p>`;
-
-  const description=typeof d.companyDescription==="string"
-   ?d.companyDescription.trim()
-   :"";
-
-  const descriptionHtml=description
-   ?`<p class="about">${esc(description)}</p>`
-   :"";
-
-  r.innerHTML=`
-   <div class="head">
-    <h2>${esc(d.name||k)} (${esc(d.ticker||k)})</h2>
-    <span class="tag">${esc(d.periodLabel||"")}</span>
-   </div>
-
-   <p class="summary">${esc(d.summary||"No summary is available.")}</p>
-
-   ${descriptionHtml}
-
-   <h3 class="sec">Quarter by quarter</h3>
-   ${chart}
-   <div class="tw">
-    <table class="qt">
-     <thead>
-      <tr>
-       <th>Quarter</th>
-       <th>Sales</th>
-       <th>vs year ago</th>
-       <th>Profit</th>
-       <th>Margin</th>
-       <th>Cash</th>
-      </tr>
-     </thead>
-     <tbody>${qs}</tbody>
-    </table>
-   </div>
-
-   <h3 class="sec">What changed in the numbers</h3>
-   ${sig}
-
-   <h3 class="sec">Recent company announcements</h3>
-   ${ev}
-
-   <p class="note">These announcements are based on company filings with the SEC. Explanations describe why an announcement may matter, not a guaranteed outcome for the stock. They may not include news, analyst views, or upcoming events.</p>
-
-   <h3 class="sec">Four quick checks (latest quarter)</h3>
-   ${(d.checks||[]).map(c=>`
-    <div class="check">
-     <div class="ctop">
-      <h3>${esc(c.title)}</h3>
-      <span class="pill ${esc(c.status)}">${L[c.status]||L.na}</span>
-     </div>
-     <span class="jargon">Technical name: ${esc(c.jargon)}</span>
-     <p>${esc(c.text)}</p>
-    </div>`).join("")}
-
-   <div class="risks">
-    <h3>What could go wrong</h3>
-    <ul>${(d.risks||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
-   </div>
-
-   <p class="note">Based on the company's quarterly filings with the SEC. Education only, not investment advice.</p>
-  `;
-
- }catch(e){
-  r.innerHTML="";
-  m.style.color="var(--bad)";
-  m.textContent="Couldn't reach the server. Try again.";
-  console.error("Plainvest request failed:",e);
- }finally{
-  clearInterval(tm);
-  busy(false);
- }
-}
-
-$("go").onclick=()=>run();
-
-$("t").addEventListener("keydown",e=>{
- if(e.key==="Enter")run();
-});
-
-document.querySelectorAll(".chip").forEach(b=>{
- b.onclick=()=>run(b.dataset.t);
-});
-</script>
+  <script src="/app.js" defer></script>
 </body>
 </html>
