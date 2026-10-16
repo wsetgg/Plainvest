@@ -1,5 +1,4 @@
-
- // GET /api/analyze?ticker=AAPL
+// GET /api/analyze?ticker=AAPL
 // Quarter-by-quarter analysis from SEC EDGAR (10-Q / 10-K figures + 8-K announcements).
 // Env vars: SEC_USER_AGENT, GEMINI_API_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN.
 
@@ -426,7 +425,9 @@ function analyzeFacts(facts) {
       : operatingCash - (qAt(capexQuarters, end, offset) ?? 0);
   };
 
-  const rows = revenueQuarters.slice(0, 4).map(quarter => {
+  // Return up to eight quarters for the chart and table.
+  // The latest quarter remains rows[0], so the existing analysis uses the latest data.
+  const rows = revenueQuarters.slice(0, 8).map(quarter => {
     const income = qAt(incomeQuarters, quarter.end);
     const yearAgo = yAgo(revenueQuarters, quarter.end);
 
