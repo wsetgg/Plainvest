@@ -1,24 +1,42 @@
-// GET /api/analyze?ticker=AAPL
-// Plainvest: SEC financial analysis and optional Gemini explanations.
-// Environment variables:
-// SEC_USER_AGENT (required)
-// GEMINI_API_KEY (optional)
-// UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN (optional; enables daily limit)
 
-"use strict";
-
-const { createHash } = require("node:crypto");
+/*
+ * Plainvest API
+ * GET /api/analyze?ticker=AAPL
+ *
+ * Required Vercel environment variables:
+ * SEC_USER_AGENT
+ * UPSTASH_REDIS_REST_URL
+ * UPSTASH_REDIS_REST_TOKEN
+ *
+ * Optional:
+ * GEMINI_API_KEY
+ */
 
 class HttpError extends Error {
-  constructor(status, msg) {
-    super(msg);
+  constructor(status, message) {
+    super(message);
     this.status = status;
   }
 }
 
-const DAILY_ANALYSIS_LIMIT = 3;
+const UA = () => process.env.SEC_USER_AGENT;
+const H = () => ({
+  "User-Agent": UA(),
+  Accept: "application/json"
+});
+const DAY = 86400000;
+const DAILY_LIMIT = 3;
 
-const RESERVE_DAILY_SCRIPT = `
+const d = value => new Date(value).getTime();
+const near = (a, b, tolerance) =>
+  Math.abs(a - b) <= tolerance * DAY;
+
+const rowsOf = (facts, concept) =>
+  facts.facts?.["us-gaap"]?.[concept]?.units?.USD || [];
+
+/* ---------------- DAILY LIMIT ---------------- */
+
+const RESERVE_SCRIPT = `
 local current = tonumber(redis.call("GET", KEYS[1]) or "0")
 if current >= tonumber(ARGV[1]) then
   return {0, current, redis.call("TTL", KEYS[1])}
@@ -30,7 +48,7 @@ end
 return {1, count, redis.call("TTL", KEYS[1])}
 `;
 
-const RELEASE_DAILY_SCRIPT = `
+const RELEASE_SCRIPT = `
 local current = tonumber(redis.call("GET", KEYS[1]) or "0")
 if current <= 1 then
   redis.call("DEL", KEYS[1])
@@ -51,7 +69,6 @@ async function redisCommand(command) {
   }
 
   let response;
-  let data;
 
   try {
     response = await fetch(url, {
@@ -60,123 +77,100 @@ async function redisCommand(command) {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(command)
+      body: JSON.stringify(command),
+      cache: "no-store"
     });
-
-    data = await response.json();
-  } catch (err) {
-    console.error("Daily limit storage error:", err.message);
-
+  } catch {
     throw new HttpError(
       503,
-      "The daily limit service is temporarily unavailable."
+      "The daily limit service is temporarily unavailable. Please try again."
     );
   }
 
-  if (!response.ok || data.error) {
-    console.error("Daily limit storage request failed:", data.error || response.status);
-
+  if (!response.ok) {
     throw new HttpError(
       503,
-      "The daily limit service is temporarily unavailable."
+      "The daily limit service is temporarily unavailable. Please try again."
+    );
+  }
+
+  const data = await response.json();
+
+  if (data.error) {
+    throw new HttpError(
+      503,
+      "The daily limit service is temporarily unavailable. Please try again."
     );
   }
 
   return data.result;
 }
 
-async function reserveDailyAnalysis(req) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  // If Redis isn't configured, don't prevent the analysis from running.
-  // The daily limit is enforced whenever both Redis variables are present.
-  if (!url || !token) {
-    console.warn(
-      "Plainvest daily analysis limit is disabled because Upstash is not configured."
-    );
-
-    return { allowed: true, key: null };
-  }
-
-  const forwarded = req.headers?.["x-forwarded-for"];
-
-  const ip = String(
-    req.headers?.["x-real-ip"] ||
-    (Array.isArray(forwarded) ? forwarded[0] : forwarded || "")
-  ).split(",")[0].trim();
-
-  if (!ip) {
-    throw new HttpError(
-      503,
-      "We couldn't identify this visitor. Please try again later."
-    );
-  }
-
+function secondsUntilUtcMidnight() {
   const now = new Date();
-  const day = now.toISOString().slice(0, 10);
-
-  const ipHash = createHash("sha256")
-    .update(ip)
-    .digest("hex")
-    .slice(0, 32);
-
-  const key = `plainvest:daily:${day}:${ipHash}`;
-
-  const nextMidnight = Date.UTC(
+  const next = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate() + 1
   );
 
-  const ttl = Math.max(
-    1,
-    Math.ceil((nextMidnight - now.getTime()) / 1000)
+  return Math.max(1, Math.ceil((next - now.getTime()) / 1000));
+}
+
+async function reserveDailyAnalysis(req) {
+  const forwarded = String(
+    req.headers?.["x-forwarded-for"] || ""
+  ).split(",")[0].trim();
+
+  const ip = String(
+    req.headers?.["x-real-ip"] || forwarded || "unknown"
   );
+
+  const crypto = await import("node:crypto");
+  const ipHash = crypto
+    .createHash("sha256")
+    .update(ip)
+    .digest("hex");
+
+  const utcDay = new Date().toISOString().slice(0, 10);
+  const key = `plainvest:daily:${utcDay}:${ipHash}`;
+  const ttl = secondsUntilUtcMidnight();
 
   const result = await redisCommand([
     "EVAL",
-    RESERVE_DAILY_SCRIPT,
+    RESERVE_SCRIPT,
     "1",
     key,
-    String(DAILY_ANALYSIS_LIMIT),
+    String(DAILY_LIMIT),
     String(ttl)
   ]);
 
-  return {
-    allowed: Number(result[0]) === 1,
-    key
-  };
+  if (!Array.isArray(result) || Number(result[0]) !== 1) {
+    throw new HttpError(
+      429,
+      "You've reached today's limit of 3 company analyses. Your limit resets at midnight UTC."
+    );
+  }
+
+  return key;
 }
 
 async function releaseDailyAnalysis(key) {
   if (!key) return;
 
-  await redisCommand([
-    "EVAL",
-    RELEASE_DAILY_SCRIPT,
-    "1",
-    key
-  ]);
+  try {
+    await redisCommand([
+      "EVAL",
+      RELEASE_SCRIPT,
+      "1",
+      key
+    ]);
+  } catch (error) {
+    console.error("Could not release daily analysis reservation:", error);
+  }
 }
 
-const UA = () => process.env.SEC_USER_AGENT;
-
-const H = () => ({
-  "User-Agent": UA(),
-  Accept: "application/json"
-});
-
-const DAY = 864e5;
-const MON = 30.44 * DAY;
-
-const d = s => new Date(s).getTime();
-
-const near = (a, b, tol) =>
-  Math.abs(a - b) <= tol * DAY;
-
-const rowsOf = (facts, concept) =>
-  facts.facts?.["us-gaap"]?.[concept]?.units?.USD || [];
+/* ---------------- SEC COMPANY LOOKUP ---------------- */
 
 let tickerMap = null;
 let tickerAt = 0;
@@ -185,7 +179,7 @@ async function lookup(ticker) {
   if (!tickerMap || Date.now() - tickerAt > DAY) {
     const response = await fetch(
       "https://www.sec.gov/files/company_tickers.json",
-      { headers: H() }
+      { headers: H(), cache: "no-store" }
     );
 
     if (!response.ok) {
@@ -196,26 +190,24 @@ async function lookup(ticker) {
     }
 
     const data = await response.json();
+    const nextMap = {};
 
-    tickerMap = {};
-
-    for (const company of Object.values(data)) {
-      tickerMap[String(company.ticker).toUpperCase()] = company;
+    for (const entry of Object.values(data)) {
+      nextMap[String(entry.ticker).toUpperCase()] = entry;
     }
 
+    tickerMap = nextMap;
     tickerAt = Date.now();
   }
 
   return tickerMap[ticker];
 }
 
-// Annual values, or balance-sheet values from 10-K and 10-Q.
 function series(facts, concepts, instant = false, anyPeriod = false) {
   let best = [];
 
   for (const concept of concepts) {
     const rows = rowsOf(facts, concept);
-
     if (!rows.length) continue;
 
     const byEnd = new Map();
@@ -225,9 +217,7 @@ function series(facts, concepts, instant = false, anyPeriod = false) {
         anyPeriod
           ? !["10-K", "10-Q"].includes(row.form)
           : row.form !== "10-K" || row.fp !== "FY"
-      ) {
-        continue;
-      }
+      ) continue;
 
       if (instant) {
         if (row.start) continue;
@@ -235,72 +225,49 @@ function series(facts, concepts, instant = false, anyPeriod = false) {
         if (!row.start) continue;
 
         const days = (d(row.end) - d(row.start)) / DAY;
-
         if (days < 340 || days > 390) continue;
       }
 
       const previous = byEnd.get(row.end);
-
       if (!previous || row.filed > previous.filed) {
         byEnd.set(row.end, row);
       }
     }
 
-    const result = [...byEnd.values()].sort(
-      (a, b) => b.end.localeCompare(a.end)
-    );
+    const values = [...byEnd.values()]
+      .sort((a, b) => b.end.localeCompare(a.end));
 
     if (
-      result.length &&
-      (!best.length || result[0].end > best[0].end)
+      values.length &&
+      (!best.length || values[0].end > best[0].end)
     ) {
-      best = result;
+      best = values;
     }
   }
 
   return best;
 }
 
-const money = value => {
-  const amount = Math.abs(value);
-  const sign = value < 0 ? "-" : "";
-
-  if (amount >= 1e9) {
-    return `${sign}$${(amount / 1e9).toFixed(1)} billion`;
-  }
-
-  if (amount >= 1e6) {
-    return `${sign}$${(amount / 1e6).toFixed(0)} million`;
-  }
-
-  return `${sign}$${Math.round(amount).toLocaleString("en-US")}`;
-};
-
-const pct = value => `${(Math.abs(value) * 100).toFixed(0)}%`;
-
-// Convert year-to-date filing totals into individual quarters.
 function quarters(facts, concepts) {
   let best = [];
 
   for (const concept of concepts) {
-    const annual = series(facts, [concept]).slice(0, 4);
-
+    const annual = series(facts, [concept]).slice(0, 5);
     if (!annual.length) continue;
 
-    const rows = rowsOf(facts, concept).filter(
-      row => row.form === "10-Q" && row.start
-    );
+    const rows = rowsOf(facts, concept)
+      .filter(row => row.form === "10-Q" && row.start);
 
-    const years = annual.map(item => ({
-      start: item.start,
-      fy: item
+    const years = annual.map(row => ({
+      start: row.start,
+      fiscalYear: row
     }));
 
     years.unshift({
       start: new Date(d(annual[0].end) + DAY)
         .toISOString()
         .slice(0, 10),
-      fy: null
+      fiscalYear: null
     });
 
     const output = [];
@@ -312,7 +279,7 @@ function quarters(facts, concepts) {
         if (!near(d(row.start), d(year.start), 10)) continue;
 
         const months = Math.round(
-          (d(row.end) - d(row.start)) / MON
+          (d(row.end) - d(row.start)) / (30.44 * DAY)
         );
 
         if (![3, 6, 9].includes(months)) continue;
@@ -326,28 +293,17 @@ function quarters(facts, concepts) {
       const q2 = ytd[6];
       const q3 = ytd[9];
 
-      if (q1) {
-        output.push({ end: q1.end, val: q1.val });
-      }
-
+      if (q1) output.push({ end: q1.end, value: q1.val });
       if (q1 && q2) {
-        output.push({
-          end: q2.end,
-          val: q2.val - q1.val
-        });
+        output.push({ end: q2.end, value: q2.val - q1.val });
       }
-
       if (q2 && q3) {
-        output.push({
-          end: q3.end,
-          val: q3.val - q2.val
-        });
+        output.push({ end: q3.end, value: q3.val - q2.val });
       }
-
-      if (q3 && year.fy) {
+      if (q3 && year.fiscalYear) {
         output.push({
-          end: year.fy.end,
-          val: year.fy.val - q3.val
+          end: year.fiscalYear.end,
+          value: year.fiscalYear.val - q3.val
         });
       }
     }
@@ -359,10 +315,8 @@ function quarters(facts, concepts) {
       (
         !best.length ||
         output[0].end > best[0].end ||
-        (
-          output[0].end === best[0].end &&
-          output.length > best.length
-        )
+        (output[0].end === best[0].end &&
+          output.length > best.length)
       )
     ) {
       best = output;
@@ -372,16 +326,17 @@ function quarters(facts, concepts) {
   return best.slice(0, 12);
 }
 
-const qAt = (list, end, offset = 0) =>
-  list.find(q =>
+function quarterValue(list, end, offset = 0) {
+  return list.find(row =>
     near(
-      d(q.end),
+      d(row.end),
       d(end) - offset * DAY,
       offset ? 12 : 7
     )
-  )?.val;
+  )?.value;
+}
 
-const yAgo = (list, end) => qAt(list, end, 365);
+const yearAgo = (list, end) => quarterValue(list, end, 365);
 
 function balance(facts) {
   const makeMap = concepts =>
@@ -390,51 +345,56 @@ function balance(facts) {
         .map(row => [row.end, row.val])
     );
 
-  const liabilitiesEquity = makeMap([
+  const liabilitiesAndEquity = makeMap([
     "LiabilitiesAndStockholdersEquity"
   ]);
-
   const liabilities = makeMap(["Liabilities"]);
-
   const equity = makeMap(["StockholdersEquity"]);
-
   const equityIncludingMinority = makeMap([
     "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
   ]);
 
-  const ends = [
-    ...new Set([
-      ...liabilitiesEquity.keys(),
-      ...liabilities.keys()
-    ])
-  ].sort().reverse();
+  const ends = [...new Set([
+    ...liabilitiesAndEquity.keys(),
+    ...liabilities.keys(),
+    ...equity.keys(),
+    ...equityIncludingMinority.keys()
+  ])].sort().reverse();
 
-  const at = end => {
-    let liab = liabilities.get(end);
+  function at(end) {
+    let totalLiabilities = liabilities.get(end);
+    let totalEquity =
+      equityIncludingMinority.get(end) ?? equity.get(end);
 
-    let eq =
-      equity.get(end) ??
-      equityIncludingMinority.get(end);
+    const total = liabilitiesAndEquity.get(end);
 
-    const total = liabilitiesEquity.get(end);
-
-    const totalEquity =
-      equityIncludingMinority.get(end) ??
-      equity.get(end);
-
-    if (liab == null && total != null && totalEquity != null) {
-      liab = total - totalEquity;
+    if (totalLiabilities == null && total != null && totalEquity != null) {
+      totalLiabilities = total - totalEquity;
     }
 
-    if (eq == null && total != null && liab != null) {
-      eq = total - liab;
+    if (totalEquity == null && total != null && totalLiabilities != null) {
+      totalEquity = total - totalLiabilities;
     }
 
-    return { liab, eq };
-  };
+    return { liabilities: totalLiabilities, equity: totalEquity };
+  }
 
   return { ends, at };
 }
+
+const money = value => {
+  if (value == null) return "n/a";
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)} billion`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(0)} million`;
+
+  return `${sign}$${Math.round(abs).toLocaleString("en-US")}`;
+};
+
+const pct = value => `${(Math.abs(value) * 100).toFixed(0)}%`;
 
 function analyzeFacts(facts) {
   if (!facts.facts?.["us-gaap"]) return null;
@@ -448,171 +408,145 @@ function analyzeFacts(facts) {
 
   if (revenue.length < 2) return null;
 
-  const income = quarters(facts, [
-    "NetIncomeLoss",
-    "ProfitLoss"
-  ]);
-
+  const netIncome = quarters(facts, ["NetIncomeLoss", "ProfitLoss"]);
   const operatingCash = quarters(facts, [
     "NetCashProvidedByUsedInOperatingActivities"
   ]);
-
   const capex = quarters(facts, [
     "PaymentsToAcquirePropertyPlantAndEquipment",
     "PaymentsToAcquireProductiveAssets"
   ]);
 
   const cashAt = (end, offset = 0) => {
-    const operating = qAt(operatingCash, end, offset);
-
-    if (operating == null) return null;
-
-    return operating - (qAt(capex, end, offset) ?? 0);
+    const operating = quarterValue(operatingCash, end, offset);
+    return operating == null
+      ? null
+      : operating - (quarterValue(capex, end, offset) ?? 0);
   };
 
-  const rows = revenue.slice(0, 4).map(q => {
-    const profit = qAt(income, q.end);
-    const previousYear = yAgo(revenue, q.end);
+  const quarterlyRows = revenue.slice(0, 4).map(row => {
+    const profit = quarterValue(netIncome, row.end);
+    const priorRevenue = yearAgo(revenue, row.end);
 
     return {
-      end: q.end,
-      sales: q.val,
-      salesYoY: previousYear > 0
-        ? q.val / previousYear - 1
+      end: row.end,
+      sales: row.value,
+      salesYoY: priorRevenue > 0
+        ? row.value / priorRevenue - 1
         : null,
       profit: profit ?? null,
-      margin: profit != null && q.val
-        ? profit / q.val
+      margin: profit != null && row.value
+        ? profit / row.value
         : null,
-      cash: cashAt(q.end)
+      cash: cashAt(row.end)
     };
   });
 
-  const now = rows[0];
-  const previous = rows[1];
-
-  const profitPreviousYear = yAgo(income, now.end);
-  const revenuePreviousYear = yAgo(revenue, now.end);
-  const cashPreviousYear = cashAt(now.end, 365);
-
-  const marginPreviousYear =
-    profitPreviousYear != null && revenuePreviousYear
-      ? profitPreviousYear / revenuePreviousYear
-      : null;
-
-  const previousGrowth = previous?.salesYoY;
-
-  const bal = balance(facts);
-  const balanceDate = bal.ends[0];
-  const currentBalance = balanceDate
-    ? bal.at(balanceDate)
-    : {};
-
-  const ratio = value =>
-    value.liab != null && value.eq > 0
-      ? value.liab / value.eq
-      : null;
-
-  const previousBalanceDate = bal.ends.find(end =>
-    near(d(end), d(balanceDate) - 365 * DAY, 12)
-  );
-
-  const currentRatio = ratio(currentBalance);
-
-  const previousRatio = previousBalanceDate
-    ? ratio(bal.at(previousBalanceDate))
+  const current = quarterlyRows[0];
+  const previous = quarterlyRows[1];
+  const priorProfit = yearAgo(netIncome, current.end);
+  const priorRevenue = yearAgo(revenue, current.end);
+  const priorCash = cashAt(current.end, 365);
+  const priorMargin = priorProfit != null && priorRevenue
+    ? priorProfit / priorRevenue
     : null;
 
-  const signals = [];
+  const sheet = balance(facts);
+  const balanceDate = sheet.ends[0];
+  const currentBalance = balanceDate ? sheet.at(balanceDate) : {};
+  const priorBalanceDate = sheet.ends.find(end =>
+    near(d(end), d(balanceDate) - 365 * DAY, 12)
+  );
+  const previousBalance = priorBalanceDate
+    ? sheet.at(priorBalanceDate)
+    : {};
 
+  const debtRatio = value =>
+    value.liabilities != null && value.equity > 0
+      ? value.liabilities / value.equity
+      : null;
+
+  const currentDebtRatio = debtRatio(currentBalance);
+  const previousDebtRatio = debtRatio(previousBalance);
+
+  const signals = [];
   const signal = (kind, title, text) =>
     signals.push({ kind, title, text });
 
-  if (now.salesYoY != null && previousGrowth != null) {
-    const difference = now.salesYoY - previousGrowth;
+  if (current.salesYoY != null && previous.salesYoY != null) {
+    const difference = current.salesYoY - previous.salesYoY;
 
     if (difference >= 0.05) {
       signal(
         "positive",
         "Sales growth is speeding up",
-        `Year-over-year sales growth rose from ${pct(previousGrowth)} to ${pct(now.salesYoY)} in the latest quarter.`
+        `Year-over-year sales growth rose from ${pct(previous.salesYoY)} to ${pct(current.salesYoY)} in the latest quarter.`
       );
     } else if (difference <= -0.05) {
       signal(
         "negative",
         "Sales growth is slowing",
-        `Year-over-year sales growth dropped from ${pct(previousGrowth)} to ${pct(now.salesYoY)} in the latest quarter.`
+        `Year-over-year sales growth dropped from ${pct(previous.salesYoY)} to ${pct(current.salesYoY)} in the latest quarter.`
       );
     }
   }
 
-  if (now.salesYoY != null && now.salesYoY <= -0.05) {
+  if (current.salesYoY != null && current.salesYoY <= -0.05) {
     signal(
       "negative",
       "Sales are shrinking",
-      `Sales were down about ${pct(now.salesYoY)} from the same quarter a year earlier.`
+      `Sales were down about ${pct(current.salesYoY)} from the same quarter a year earlier.`
     );
   }
 
-  if (now.salesYoY != null && now.salesYoY >= 0.2) {
+  if (current.salesYoY != null && current.salesYoY >= 0.2) {
     signal(
       "positive",
       "Fast growth",
-      `Sales were up about ${pct(now.salesYoY)} from the same quarter a year earlier.`
+      `Sales were up about ${pct(current.salesYoY)} from the same quarter a year earlier.`
     );
   }
 
-  if (
-    profitPreviousYear != null &&
-    now.profit != null &&
-    profitPreviousYear < 0 &&
-    now.profit >= 0
-  ) {
-    signal(
-      "positive",
-      "Swung to a profit",
-      "It lost money in the same quarter a year ago, but made a profit in the latest quarter."
-    );
-  } else if (
-    profitPreviousYear != null &&
-    now.profit != null &&
-    profitPreviousYear >= 0 &&
-    now.profit < 0
-  ) {
-    signal(
-      "negative",
-      "Swung to a loss",
-      "It made a profit in the same quarter a year ago, but lost money in the latest quarter."
-    );
-  } else if (
-    now.margin != null &&
-    marginPreviousYear != null
-  ) {
-    const difference = now.margin - marginPreviousYear;
-
-    if (difference >= 0.03) {
+  if (priorProfit != null && current.profit != null) {
+    if (priorProfit < 0 && current.profit >= 0) {
       signal(
         "positive",
-        "Profit margin improved",
-        `It kept about ${(now.margin * 100).toFixed(0)}% of sales as profit, up from ${(marginPreviousYear * 100).toFixed(0)}% a year earlier.`
+        "Swung to a profit",
+        "It lost money in the same quarter a year ago, but made a profit in the latest quarter."
       );
-    } else if (difference <= -0.03) {
+    } else if (priorProfit >= 0 && current.profit < 0) {
       signal(
         "negative",
-        "Profit margin shrank",
-        `It kept about ${(now.margin * 100).toFixed(0)}% of sales as profit, down from ${(marginPreviousYear * 100).toFixed(0)}% a year earlier.`
+        "Swung to a loss",
+        "It made a profit in the same quarter a year ago, but lost money in the latest quarter."
       );
+    } else if (current.margin != null && priorMargin != null) {
+      const difference = current.margin - priorMargin;
+
+      if (difference >= 0.03) {
+        signal(
+          "positive",
+          "Profit margin improved",
+          `It kept about ${(current.margin * 100).toFixed(0)}% of sales as profit, up from ${(priorMargin * 100).toFixed(0)}% a year earlier.`
+        );
+      } else if (difference <= -0.03) {
+        signal(
+          "negative",
+          "Profit margin shrank",
+          `It kept about ${(current.margin * 100).toFixed(0)}% of sales as profit, down from ${(priorMargin * 100).toFixed(0)}% a year earlier.`
+        );
+      }
     }
   }
 
-  if (now.cash != null && cashPreviousYear != null) {
-    if (now.cash > 0 && cashPreviousYear <= 0) {
+  if (current.cash != null && priorCash != null) {
+    if (current.cash > 0 && priorCash <= 0) {
       signal(
         "positive",
         "Cash flow turned positive",
         "It used cash in the same quarter a year ago, but brought in cash in the latest quarter."
       );
-    } else if (now.cash < 0 && cashPreviousYear >= 0) {
+    } else if (current.cash < 0 && priorCash >= 0) {
       signal(
         "negative",
         "Now burning cash",
@@ -621,23 +555,23 @@ function analyzeFacts(facts) {
     }
   }
 
-  if (currentRatio != null && previousRatio != null) {
-    if (currentRatio - previousRatio >= 0.5) {
+  if (currentDebtRatio != null && previousDebtRatio != null) {
+    if (currentDebtRatio - previousDebtRatio >= 0.5) {
       signal(
         "negative",
         "Debt load is rising",
-        `It owes about $${currentRatio.toFixed(1)} per $1 of owners' stake, up from $${previousRatio.toFixed(1)} a year earlier.`
+        `It owes about $${currentDebtRatio.toFixed(1)} per $1 of owners' stake, up from $${previousDebtRatio.toFixed(1)} a year earlier.`
       );
-    } else if (previousRatio - currentRatio >= 0.5) {
+    } else if (previousDebtRatio - currentDebtRatio >= 0.5) {
       signal(
         "positive",
         "Debt load is falling",
-        `It owes about $${currentRatio.toFixed(1)} per $1 of owners' stake, down from $${previousRatio.toFixed(1)} a year earlier.`
+        `It owes about $${currentDebtRatio.toFixed(1)} per $1 of owners' stake, down from $${previousDebtRatio.toFixed(1)} a year earlier.`
       );
     }
   }
 
-  const notAvailable = (title, jargon) => ({
+  const unavailable = (title, jargon) => ({
     title,
     jargon,
     status: "na",
@@ -646,26 +580,27 @@ function analyzeFacts(facts) {
 
   const checks = [];
 
-  if (now.margin == null) {
-    checks.push(notAvailable("Profit", "Net profit margin"));
+  if (current.margin == null) {
+    checks.push(unavailable("Profit", "Net profit margin"));
   } else {
     checks.push({
       title: "Profit",
       jargon: "Net profit margin",
-      status: now.margin >= 0.10
+      status: current.margin >= 0.1
         ? "good"
-        : now.margin >= 0.03
-          ? "warn"
-          : "bad",
-      text: now.margin >= 0
-        ? `Of every $100 it sold in the latest quarter, it kept about $${(now.margin * 100).toFixed(0)} as profit after all costs.`
-        : `In the latest quarter, it lost about $${(-now.margin * 100).toFixed(0)} for every $100 it sold.`
+        : current.margin >= 0.03 ? "warn" : "bad",
+      text: current.margin >= 0
+        ? `Of every $100 it sold in the latest quarter, it kept about $${(current.margin * 100).toFixed(0)} as profit after all costs.`
+        : `In the latest quarter, it lost about $${(-current.margin * 100).toFixed(0)} for every $100 it sold.`
     });
   }
 
-  if (currentBalance.liab == null || currentBalance.eq == null) {
-    checks.push(notAvailable("Debt", "Total liabilities to equity"));
-  } else if (currentBalance.eq <= 0) {
+  const liabilities = currentBalance.liabilities;
+  const equity = currentBalance.equity;
+
+  if (liabilities == null || equity == null) {
+    checks.push(unavailable("Debt", "Total liabilities to equity"));
+  } else if (equity <= 0) {
     checks.push({
       title: "Debt",
       jargon: "Total liabilities to equity",
@@ -676,96 +611,80 @@ function analyzeFacts(facts) {
     checks.push({
       title: "Debt",
       jargon: "Total liabilities to equity",
-      status: currentRatio <= 1
+      status: currentDebtRatio <= 1
         ? "good"
-        : currentRatio <= 2.5
-          ? "warn"
-          : "bad",
-      text: `As of ${balanceDate}, it owed about $${currentRatio.toFixed(1)} for every $1 that belongs to its owners. Banks and utilities usually run higher than other industries.`
+        : currentDebtRatio <= 2.5 ? "warn" : "bad",
+      text: `As of ${balanceDate}, it owed about $${currentDebtRatio.toFixed(1)} for every $1 that belongs to its owners. Banks and utilities usually run higher than other industries.`
     });
   }
 
-  if (now.salesYoY == null) {
-    checks.push(notAvailable("Growth", "Revenue growth"));
+  if (current.salesYoY == null) {
+    checks.push(unavailable("Growth", "Revenue growth"));
   } else {
     checks.push({
       title: "Growth",
       jargon: "Revenue growth (year over year)",
-      status: now.salesYoY >= 0.08
+      status: current.salesYoY >= 0.08
         ? "good"
-        : now.salesYoY >= 0
-          ? "warn"
-          : "bad",
-      text: `Sales in the latest quarter ${now.salesYoY >= 0 ? "were up" : "were down"} about ${pct(now.salesYoY)} from the same quarter a year earlier.`
+        : current.salesYoY >= 0 ? "warn" : "bad",
+      text: `Sales in the latest quarter ${current.salesYoY >= 0 ? "were up" : "were down"} about ${pct(current.salesYoY)} from the same quarter a year earlier.`
     });
   }
 
-  if (now.cash == null) {
-    checks.push(notAvailable("Cash", "Free cash flow"));
+  if (current.cash == null) {
+    checks.push(unavailable("Cash", "Free cash flow"));
   } else {
     checks.push({
       title: "Cash",
       jargon: "Free cash flow",
-      status: now.cash > 0 && now.cash / now.sales >= 0.05
+      status: current.cash > 0 && current.cash / current.sales >= 0.05
         ? "good"
-        : now.cash > 0
-          ? "warn"
-          : "bad",
-      text: now.cash > 0
-        ? `In the latest quarter, after paying for equipment and buildings, it generated ${money(now.cash)} in cash.`
-        : `In the latest quarter, after paying for equipment and buildings, it used up ${money(-now.cash)} in cash.`
+        : current.cash > 0 ? "warn" : "bad",
+      text: current.cash > 0
+        ? `In the latest quarter, after paying for equipment and buildings, it generated ${money(current.cash)} in cash.`
+        : `In the latest quarter, after paying for equipment and buildings, it used up ${money(-current.cash)} in cash.`
     });
   }
 
-  const status = title =>
-    checks.find(check => check.title === title)?.status;
-
+  const status = title => checks.find(item => item.title === title)?.status;
   const risks = [];
 
   if (status("Profit") === "bad") {
     risks.push("It isn't earning much or any profit on its sales right now.");
   }
-
   if (status("Debt") === "bad") {
     risks.push("High debt can become a burden if business slows or interest rates rise.");
   }
-
   if (status("Growth") === "bad") {
     risks.push("Shrinking sales can be a sign the business is losing customers.");
   }
-
   if (status("Cash") === "bad") {
     risks.push("It is spending more cash than it brings in, so it may need to borrow or sell new shares.");
   }
-
   if (!risks.length) {
     risks.push("Even healthy companies can be hurt by competition, new regulation, or an economic downturn.");
   }
 
   const summary =
-    `In the quarter ending ${now.end}, it reported ${money(now.sales)} in sales` +
-    (
-      now.salesYoY != null
-        ? `, ${now.salesYoY >= 0 ? "up" : "down"} ${pct(now.salesYoY)} from a year earlier`
-        : ""
-    ) +
-    (
-      now.profit != null
-        ? `, and ${now.profit >= 0 ? `a profit of ${money(now.profit)}` : `a loss of ${money(-now.profit)}`}`
-        : ""
-    ) +
+    `In the quarter ending ${current.end}, it reported ${money(current.sales)} in sales` +
+    (current.salesYoY != null
+      ? `, ${current.salesYoY >= 0 ? "up" : "down"} ${pct(current.salesYoY)} from a year earlier`
+      : "") +
+    (current.profit != null
+      ? `, and ${current.profit >= 0 ? `a profit of ${money(current.profit)}` : `a loss of ${money(-current.profit)}`}`
+      : "") +
     ". " +
     (
       signals.length
-        ? `The main changes were: ${signals.slice(0, 3).map(s => `${s.title.toLowerCase()} — ${s.text}`).join(" ")}`
+        ? `The main changes were: ${signals.slice(0, 3).map(item => `${item.title.toLowerCase()} — ${item.text}`).join(" ")}`
         : "There were no major changes in the tracked figures compared with the same period a year earlier."
     );
 
   return {
-    fiscalYearEnd: now.end,
-    periodLabel: `Latest quarter ended ${now.end}`,
+    fiscalYearEnd: current.end,
+    periodLabel: `Latest quarter ended ${current.end}`,
     balanceSheetDate: balanceDate ?? null,
-    quarters: rows,
+    quarters: quarterlyRows,
     signals,
     checks,
     risks,
@@ -773,7 +692,8 @@ function analyzeFacts(facts) {
   };
 }
 
-// Recent company announcements from SEC 8-K filings.
+/* ---------------- ANNOUNCEMENTS ---------------- */
+
 const ITEMS = {
   "1.02": ["negative", "A major agreement ended"],
   "1.03": ["negative", "Bankruptcy filing"],
@@ -788,85 +708,206 @@ const ITEMS = {
   "2.03": ["watch", "New debt or financial obligation taken on"],
   "1.01": ["event", "New major agreement signed"],
   "2.01": ["event", "Company bought or sold a business"],
+  "2.02": ["event", "Quarterly or annual financial results announced"],
   "5.01": ["event", "Change in company control"],
-  "5.02": ["event", "Executive or director change"]
+  "5.02": ["event", "Executive or director change"],
+  "5.03": ["event", "Change to company governing documents"],
+  "5.07": ["event", "Shareholders voted on company matters"],
+  "7.01": ["event", "Company made a public disclosure"],
+  "8.01": ["event", "Other important company update"]
 };
+
+function filingUrl(cik, accession, document) {
+  if (!accession || !document) return null;
+
+  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${String(accession).replace(/-/g, "")}/${document}`;
+}
 
 function eventsFrom(submissions, cik) {
   const recent = submissions?.filings?.recent;
-
   if (!recent?.form) return [];
 
   const rank = { negative: 0, watch: 1, event: 2 };
-  const cutoff = Date.now() - 365 * DAY;
+  const cutoff = Date.now() - 90 * DAY;
   const output = [];
 
   for (let i = 0; i < recent.form.length; i++) {
     if (
       !String(recent.form[i]).startsWith("8-K") ||
       d(recent.filingDate[i]) < cutoff
-    ) {
-      continue;
-    }
+    ) continue;
 
-    const hit = String(recent.items?.[i] || "")
+    const item = String(recent.items?.[i] || "")
       .split(",")
       .map(value => value.trim())
       .filter(value => ITEMS[value])
       .sort((a, b) => rank[ITEMS[a][0]] - rank[ITEMS[b][0]])[0];
 
-    if (!hit) continue;
-
-    const accession = String(recent.accessionNumber[i])
-      .replace(/-/g, "");
-
-    const document = recent.primaryDocument?.[i];
+    if (!item) continue;
 
     output.push({
       date: recent.filingDate[i],
-      kind: ITEMS[hit][0],
-      title: ITEMS[hit][1],
-      url: document
-        ? `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession}/${document}`
-        : null
+      kind: ITEMS[item][0],
+      title: ITEMS[item][1],
+      url: filingUrl(cik, recent.accessionNumber[i], recent.primaryDocument?.[i])
     });
   }
 
   return output
-    .sort((a, b) =>
-      rank[a.kind] - rank[b.kind] ||
-      b.date.localeCompare(a.date)
-    )
+    .sort((a, b) => rank[a.kind] - rank[b.kind] || b.date.localeCompare(a.date))
     .slice(0, 6);
 }
 
-// Optional Gemini explanations based on the SEC data supplied to the model.
-async function aiWrite(name, out) {
-  const key = process.env.GEMINI_API_KEY;
+function earningsReportsFrom(submissions, cik) {
+  const recent = submissions?.filings?.recent;
+  if (!recent?.form) return [];
 
-  if (!key) {
-    console.warn("GEMINI_API_KEY is not configured; using SEC-based explanations.");
-    return null;
+  const reports = [];
+
+  for (let i = 0; i < recent.form.length; i++) {
+    const form = String(recent.form[i] || "");
+    if (form !== "10-Q" && form !== "10-K") continue;
+
+    const periodEnd = recent.reportDate?.[i];
+    const filedDate = recent.filingDate?.[i];
+    if (!periodEnd || !filedDate) continue;
+
+    reports.push({
+      form,
+      type: form === "10-K" ? "Annual report" : "Quarterly report",
+      periodEnd,
+      filedDate,
+      url: filingUrl(cik, recent.accessionNumber?.[i], recent.primaryDocument?.[i])
+    });
   }
 
-  try {
-    const formatMoney = value =>
-      value == null ? "n/a" : money(value);
+  return reports
+    .sort((a, b) => b.periodEnd.localeCompare(a.periodEnd) || b.filedDate.localeCompare(a.filedDate))
+    .slice(0, 12);
+}
 
-    const quarterText = out.quarters.map(q =>
-      `Quarter ending ${q.end}: sales ${formatMoney(q.sales)}, ` +
-      `year-over-year change ${
-        q.salesYoY == null
-          ? "n/a"
-          : (q.salesYoY * 100).toFixed(0) + "%"
-      }, profit ${formatMoney(q.profit)}, cash ${formatMoney(q.cash)}`
+function cleanFilingText(source, maxLength = 18000) {
+  return String(source || "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, value) => {
+      const code = Number(value);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : " ";
+    })
+    .replace(/&#x([\da-f]+);/gi, (_, value) => {
+      const code = parseInt(value, 16);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : " ";
+    })
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+async function companySourceFrom(submissions, cik) {
+  const recent = submissions?.filings?.recent;
+  if (!recent?.form) return "";
+
+  const indices = recent.form
+    .map((form, i) => ({ form, i, filed: recent.filingDate?.[i] || "" }))
+    .filter(item => item.form === "10-K" || item.form === "10-Q")
+    .sort((a, b) =>
+      (b.form === "10-K" ? 1 : 0) - (a.form === "10-K" ? 1 : 0) ||
+      b.filed.localeCompare(a.filed)
+    );
+
+  for (const item of indices.slice(0, 3)) {
+    const url = filingUrl(
+      cik,
+      recent.accessionNumber?.[item.i],
+      recent.primaryDocument?.[item.i]
+    );
+
+    if (!url) continue;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": UA(),
+          Accept: "text/html, text/plain, application/xhtml+xml"
+        },
+        cache: "no-store"
+      });
+
+      if (!response.ok) continue;
+
+      const text = cleanFilingText(await response.text(), 500000);
+      if (text.length <= 300) continue;
+
+      const headings = [...text.matchAll(/\bitem\s+1\.?\s+business\b/gi)];
+
+      if (headings.length) {
+        const start = headings[headings.length - 1].index;
+        const rest = text.slice(start);
+        const end = /\bitem\s+(?:1a\.?\s+risk\s+factors|2\.?\s+properties)\b/i.exec(rest.slice(20));
+        return (end ? rest.slice(0, end.index + 20) : rest).slice(0, 18000);
+      }
+
+      return text.slice(0, 18000);
+    } catch (error) {
+      console.error("SEC company description source error:", error.message);
+    }
+  }
+
+  return "";
+}
+
+async function addEventDetails(events) {
+  return Promise.all((events || []).map(async event => {
+    if (!event.url) return { ...event, details: null };
+
+    try {
+      const response = await fetch(event.url, {
+        headers: {
+          "User-Agent": UA(),
+          Accept: "text/html, text/plain, application/xhtml+xml"
+        },
+        cache: "no-store"
+      });
+
+      if (!response.ok) return { ...event, details: null };
+
+      const details = cleanFilingText(await response.text(), 8000);
+      return { ...event, details: details || null };
+    } catch (error) {
+      console.error("SEC filing detail error:", error.message);
+      return { ...event, details: null };
+    }
+  }));
+}
+
+/* ---------------- GEMINI EXPLANATIONS ---------------- */
+
+async function aiWrite(name, output, companySource = "", sicDescription = "") {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+
+  try {
+    const formatMoney = value => value == null ? "n/a" : money(value);
+
+    const quarterText = output.quarters.map(row =>
+      `Quarter ending ${row.end}: sales ${formatMoney(row.sales)}, year-over-year change ${
+        row.salesYoY == null ? "n/a" : `${(row.salesYoY * 100).toFixed(0)}%`
+      }, profit ${formatMoney(row.profit)}, cash ${formatMoney(row.cash)}`
     ).join("\n");
 
-    const signalText = out.signals
-      .map(s => `${s.kind}: ${s.title}. ${s.text}`)
-      .join("\n") || "none";
+    const signalText = output.signals
+      .map(item => `${item.kind}: ${item.title}. ${item.text}`)
+      .join("\n") || "None";
 
-    const eventInputs = (out.events || []).map((event, index) => ({
+    const eventInputs = (output.events || []).map((event, index) => ({
       index,
       date: event.date || "Unknown date",
       title: event.title || "Untitled filing",
@@ -875,46 +916,38 @@ async function aiWrite(name, out) {
     }));
 
     const prompt = `You are Plainvest, a careful financial explainer for beginners.
-
 Use ONLY the company data supplied below. Do not use outside knowledge or guess why something happened.
+Return valid JSON only, with exactly this shape:
+{"companyDescription":"2 to 4 plain-English sentences","summary":"4 to 6 plain-English sentences","risks":["2 or 3 short risks tied to supplied data"],"eventAnalyses":[{"index":0,"whatHappened":"...","whyItMatters":"...","potentialImpact":"...","uncertainty":"..."}]}
 
-Return valid JSON only with this shape:
-{
-  "summary": "4 to 6 plain-English sentences",
-  "risks": ["2 or 3 short risks tied to supplied data"],
-  "eventAnalyses": [
-    {
-      "index": 0,
-      "whatHappened": "...",
-      "whyItMatters": "...",
-      "potentialImpact": "...",
-      "uncertainty": "..."
-    }
-  ]
-}
+COMPANY DESCRIPTION RULES:
+- Explain what the company sells or provides, who may buy/use it, and how it makes money, but only where the SEC source text supports those facts.
+- Prefer the SEC business-description text below. The SIC description is a broad industry label, not proof of exact products or customers.
+- If the source does not provide enough information, say it is not clear from the supplied SEC text.
+- Keep it specific, natural, and understandable to a Grade 9 student.
 
 SUMMARY RULES:
 - Start with the latest quarter's sales and year-over-year change, and profit/loss if available.
-- Explain the most important changes in the numbers, using actual comparisons and figures supplied.
-- Explain why each change could matter.
-- Mention both positive and negative changes when both exist.
+- Explain important changes in the numbers using actual comparisons and figures supplied.
+- Explain why each change could matter. Mention both positive and negative changes when both exist.
 - If the data does not establish a cause, explicitly say it does not tell us why.
 - Do not give buy/sell advice or price predictions.
-- Keep wording natural and understandable to a Grade 9 student.
-- Avoid jargon unless explained.
+- Keep wording natural and beginner-friendly.
 
 EVENT ANALYSIS RULES:
-- Return one eventAnalyses entry for every supplied announcement, preserving its index.
-- Explain what the filing says in plain English.
-- Explain why an investor or the company might care, using only supplied details.
-- Describe plausible business implications, not a prediction of stock price.
-- State what is unknown or uncertain.
+- Return exactly one eventAnalyses entry for every supplied announcement, preserving its index.
+- Explain what the filing says; do not merely repeat its title.
+- Explain why an investor or company might care, based only on the supplied filing.
+- Describe plausible business implications, not a stock-price prediction.
 - Do not invent amounts, causes, consequences, or facts.
-- If filing details are missing, say so.
+- If filing details are missing or insufficient, say so clearly.
 - Keep each field concise and beginner-friendly.
 - If there are no announcements, return an empty eventAnalyses array.
 
 COMPANY: ${name}
+SEC INDUSTRY LABEL (may be broad): ${sicDescription || "Not available"}
+SEC BUSINESS-DESCRIPTION SOURCE:
+${companySource || "Not available"}
 
 QUARTERS (newest first):
 ${quarterText}
@@ -925,107 +958,114 @@ ${signalText}
 RECENT COMPANY ANNOUNCEMENTS:
 ${JSON.stringify(eventInputs)}`;
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": key
-        },
-        body: JSON.stringify({
-          contents: [
-            { parts: [{ text: prompt }] }
-          ],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.2,
+        maxOutputTokens: 6000
       }
-    );
+    });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    let response;
 
-      console.error(
-        "Gemini API error:",
-        response.status,
-        errorText
+    for (let attempt = 0; attempt < 2; attempt++) {
+      response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": key
+          },
+          body,
+          cache: "no-store"
+        }
       );
 
-      // Gemini is optional: preserve the SEC-based analysis if it fails.
+      if (response.ok) break;
+
+      const errorText = await response.text();
+      console.error("Gemini API error:", response.status, errorText);
+
+      if (
+        attempt === 0 &&
+        [429, 500, 502, 503, 504].includes(response.status)
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 700));
+        continue;
+      }
+
       return null;
     }
 
-    const data = await response.json();
+    if (!response?.ok) return null;
 
+    const data = await response.json();
     const raw = data.candidates?.[0]?.content?.parts
       ?.map(part => part.text || "")
       .join("");
 
-    if (!raw) {
-      console.error(
-        "Gemini returned no text.",
-        JSON.stringify(data).slice(0, 1000)
-      );
+    if (!raw) return null;
 
-      return null;
-    }
+    const cleaned = raw.trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
 
-    const result = JSON.parse(raw);
+    const parsed = JSON.parse(cleaned);
 
-    if (
-      typeof result.summary !== "string" ||
-      !Array.isArray(result.risks)
-    ) {
-      console.error("Gemini returned an unexpected response format.");
+    if (typeof parsed.summary !== "string" || !Array.isArray(parsed.risks)) {
       return null;
     }
 
     const analyses = new Map(
-      (Array.isArray(result.eventAnalyses) ? result.eventAnalyses : [])
+      (Array.isArray(parsed.eventAnalyses) ? parsed.eventAnalyses : [])
         .filter(item => Number.isInteger(item.index))
         .map(item => [item.index, item])
     );
 
-    const events = (out.events || []).map((event, index) => {
+    const events = (output.events || []).map((event, index) => {
       const analysis = analyses.get(index);
 
       return {
         ...event,
-        explanation: analysis
-          ? {
-              whatHappened: String(
-                analysis.whatHappened ||
-                "The filing text does not provide enough information to explain this announcement."
-              ),
-              whyItMatters: String(
-                analysis.whyItMatters ||
-                "Its importance cannot be determined from the available filing details."
-              ),
-              potentialImpact: String(
-                analysis.potentialImpact ||
-                "The business impact is unclear from the available information."
-              ),
-              uncertainty: String(
-                analysis.uncertainty ||
-                "The available information does not establish the full implications."
-              )
-            }
-          : null
+        explanation: analysis ? {
+          whatHappened: String(
+            analysis.whatHappened ||
+            "The filing text does not provide enough information to explain this announcement."
+          ),
+          whyItMatters: String(
+            analysis.whyItMatters ||
+            "Its importance cannot be determined from the available filing details."
+          ),
+          potentialImpact: String(
+            analysis.potentialImpact ||
+            "The business impact is unclear from the available information."
+          ),
+          uncertainty: String(
+            analysis.uncertainty ||
+            "The available information does not establish the full implications."
+          )
+        } : null
       };
     });
 
     return {
-      summary: result.summary,
-      risks: result.risks.slice(0, 3).map(String),
+      ...(typeof parsed.companyDescription === "string" &&
+      parsed.companyDescription.trim()
+        ? { companyDescription: parsed.companyDescription.trim() }
+        : {}),
+      summary: parsed.summary,
+      risks: parsed.risks.slice(0, 3).map(String),
       events
     };
-  } catch (err) {
-    console.error("Gemini aiWrite failed:", err.message || err);
+  } catch (error) {
+    console.error("Gemini aiWrite failed:", error);
     return null;
   }
 }
+
+/* ---------------- ETF AND FOREIGN TICKER CHECKS ---------------- */
 
 const FOREIGN_MSG =
   "That looks like a stock listed on a non-US exchange (like Toronto, London, or Tokyo). Plainvest only covers US-listed companies for now. If the company also trades in the US, try its US ticker.";
@@ -1037,14 +1077,9 @@ const FOREIGN =
   /^[A-Z0-9]{1,6}[.:](TO|V|NE|CN|L|T|HK|AX|NZ|SI|SW|PA|DE|F|MI|MC|AS|ST|OL|HE|CO|SS|SZ|KS|KQ|NS|BO|SA|MX|TW|JK|BK|KL|TA|IR)$|^(TSX|TSXV|TSE|LSE|LON|ASX|HKEX|SGX|FRA|EPA|NSE|BSE|TYO|SHA|SHE|KRX|BME|SWX|AMS)[:.]/;
 
 const ETFS = new Set((
-  "SPY QQQ VOO VTI IVV DIA IWM VT VEA VWO VXUS BND AGG GLD IAU SLV " +
-  "XLK XLF XLE XLV XLY XLP XLI XLU XLB XLRE XLC ARKK ARKG ARKW " +
-  "SCHD SCHB SCHX SCHG VUG VTV VIG VYM VGT VHT VNQ IJH IJR IJK " +
-  "MDY EFA IEFA IEMG EEM TLT IEF SHY HYG LQD JNK USO UNG SMH SOXX " +
-  "SOXL TQQQ SQQQ UPRO SPXL SPXS TNA TZA IVW IVE IWF IWD IWB IWV " +
-  "QQQM SPLG SPYG SPYV RSP QUAL USMV DGRO DVY SDY JEPI JEPQ BITO " +
-  "IBIT FBTC GBTC ETHE XBI IBB KRE KBE XOP OIH GDX GDXJ ITB XHB " +
-  "VXX UVXY"
+  "SPY QQQ VOO VTI IVV DIA IWM VT VEA VWO VXUS BND AGG GLD IAU SLV XLK XLF XLE XLV XLY XLP XLI XLU XLB XLRE XLC ARKK ARKG ARKW SCHD SCHB SCHX SCHG " +
+  "VUG VTV VIG VYM VGT VHT VNQ IJH IJR IJK MDY EFA IEFA IEMG EEM TLT IEF SHY HYG LQD JNK USO UNG SMH SOXX SOXL TQQQ SQQQ UPRO SPXL SPXS TNA TZA IVW IVE IWF IWD IWB IWV " +
+  "QQQM SPLG SPYG SPYV RSP QUAL USMV DGRO DVY SDY JEPI JEPQ BITO IBIT FBTC GBTC ETHE XBI IBB KRE KBE XOP OIH GDX GDXJ ITB XHB VXX UVXY"
 ).split(" "));
 
 let fundSet = null;
@@ -1057,7 +1092,7 @@ async function isFund(ticker) {
     if (!fundSet || Date.now() - fundAt > 7 * DAY) {
       const response = await fetch(
         "https://www.sec.gov/files/company_tickers_mf.json",
-        { headers: H() }
+        { headers: H(), cache: "no-store" }
       );
 
       if (!response.ok) return false;
@@ -1067,9 +1102,7 @@ async function isFund(ticker) {
 
       fundSet = new Set(
         index >= 0
-          ? (data.data || []).map(row =>
-              String(row[index]).toUpperCase()
-            )
+          ? (data.data || []).map(row => String(row[index]).toUpperCase())
           : []
       );
 
@@ -1077,81 +1110,29 @@ async function isFund(ticker) {
     }
 
     return fundSet.has(ticker);
-  } catch (err) {
-    console.error("SEC fund lookup failed:", err.message);
+  } catch {
     return false;
   }
 }
 
-async function addEventDetails(events) {
-  return Promise.all((events || []).map(async event => {
-    if (!event.url) {
-      return { ...event, details: null };
-    }
+/* ---------------- API HANDLER ---------------- */
 
-    try {
-      const response = await fetch(event.url, {
-        headers: {
-          "User-Agent": UA(),
-          Accept: "text/html, text/plain, application/xhtml+xml"
-        }
-      });
+export default async function handler(req, res) {
+  // Prevent browsers and Vercel from caching results or limit responses.
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("Vary", "x-forwarded-for, x-real-ip");
 
-      if (!response.ok) {
-        return { ...event, details: null };
-      }
-
-      const source = await response.text();
-
-      const details = source
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-        .replace(/<!--[\s\S]*?-->/g, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&#(\d+);/g, (_, number) => {
-          const code = Number(number);
-
-          return code > 0 && code <= 0x10ffff
-            ? String.fromCodePoint(code)
-            : " ";
-        })
-        .replace(/&#x([\da-f]+);/gi, (_, number) => {
-          const code = parseInt(number, 16);
-
-          return code > 0 && code <= 0x10ffff
-            ? String.fromCodePoint(code)
-            : " ";
-        })
-        .replace(/&nbsp;|&#160;/gi, " ")
-        .replace(/&amp;/gi, "&")
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;|&apos;/gi, "'")
-        .replace(/&lt;/gi, "<")
-        .replace(/&gt;/gi, ">")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 8000);
-
-      return {
-        ...event,
-        details: details || null
-      };
-    } catch (err) {
-      console.error("SEC filing detail error:", err.message);
-
-      return { ...event, details: null };
-    }
-  }));
-}
-
-// IMPORTANT: Use CommonJS consistently throughout this file.
-async function handler(req, res) {
-  let dailyReservationKey = null;
+  let reservationKey = null;
 
   try {
     if (req.method && req.method !== "GET") {
       res.setHeader("Allow", "GET");
-
       throw new HttpError(
         405,
         "Method not allowed. Use GET /api/analyze?ticker=AAPL."
@@ -1161,20 +1142,11 @@ async function handler(req, res) {
     if (!UA()) {
       throw new HttpError(
         500,
-        "Server setup incomplete: SEC_USER_AGENT is missing. Add it in Vercel environment variables."
+        "Server setup incomplete: SEC_USER_AGENT is missing."
       );
     }
 
-    const raw = String(req.query?.ticker || "")
-      .trim()
-      .toUpperCase();
-
-    if (!raw) {
-      throw new HttpError(
-        400,
-        "Enter a valid ticker, like AAPL."
-      );
-    }
+    const raw = String(req.query?.ticker || "").trim().toUpperCase();
 
     if (FOREIGN.test(raw)) {
       throw new HttpError(422, FOREIGN_MSG);
@@ -1183,17 +1155,17 @@ async function handler(req, res) {
     const ticker = raw.replace(".", "-");
 
     if (!/^[A-Z0-9-]{1,8}$/.test(ticker)) {
-      throw new HttpError(
-        400,
-        "Enter a valid ticker, like AAPL."
-      );
+      throw new HttpError(400, "Enter a valid ticker, like AAPL.");
     }
 
     if (ETFS.has(ticker)) {
       throw new HttpError(422, ETF_MSG);
     }
 
-    // Look up the ticker first.
+    // Reserve a slot before doing the costly analysis.
+    // Failed requests release this reservation in the catch block.
+    reservationKey = await reserveDailyAnalysis(req);
+
     const company = await lookup(ticker);
 
     if (!company) {
@@ -1207,34 +1179,17 @@ async function handler(req, res) {
       );
     }
 
-    // Enforce the daily limit when Upstash is configured.
-    const reservation = await reserveDailyAnalysis(req);
-
-    if (!reservation.allowed) {
-      res.setHeader("Cache-Control", "no-store");
-
-      throw new HttpError(
-        429,
-        "You've reached today's limit of 3 company analyses. Your limit resets at midnight UTC."
-      );
-    }
-
-    dailyReservationKey = reservation.key;
-
     const cik = String(company.cik_str).padStart(10, "0");
 
     const [factsResponse, submissionsResponse] = await Promise.all([
       fetch(
         `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
-        { headers: H() }
+        { headers: H(), cache: "no-store" }
       ),
       fetch(
         `https://data.sec.gov/submissions/CIK${cik}.json`,
-        { headers: H() }
-      ).catch(err => {
-        console.error("SEC submissions request failed:", err.message);
-        return null;
-      })
+        { headers: H(), cache: "no-store" }
+      ).catch(() => null)
     ]);
 
     let submissions = null;
@@ -1243,14 +1198,10 @@ async function handler(req, res) {
       if (submissionsResponse?.ok) {
         submissions = await submissionsResponse.json();
       }
-    } catch (err) {
-      console.error("Could not read SEC submissions:", err.message);
-    }
+    } catch {}
 
-    const unsupportedCompanyError = () => {
-      const forms = new Set(
-        submissions?.filings?.recent?.form || []
-      );
+    const unsupportedCompany = () => {
+      const forms = new Set(submissions?.filings?.recent?.form || []);
 
       if (forms.has("20-F") || forms.has("40-F")) {
         return new HttpError(
@@ -1265,93 +1216,81 @@ async function handler(req, res) {
 
       return new HttpError(
         422,
-        `${company.title} doesn't have enough quarterly reports in a format this version can read. This can happen with newly listed or unusual companies.`
+        `${company.title} doesn't have enough quarterly reports in a format this version can read (often newly listed or unusual companies).`
       );
     };
 
-    if (factsResponse.status === 404) {
-      throw unsupportedCompanyError();
-    }
+    if (factsResponse.status === 404) throw unsupportedCompany();
 
     if (!factsResponse.ok) {
-      console.error(
-        "SEC company facts request failed:",
-        factsResponse.status
-      );
-
-      throw new HttpError(
-        502,
-        "The SEC didn't respond successfully. Try again shortly."
-      );
+      throw new HttpError(502, "The SEC didn't respond. Try again shortly.");
     }
 
-    let facts;
+    const output = analyzeFacts(await factsResponse.json());
 
-    try {
-      facts = await factsResponse.json();
-    } catch {
-      throw new HttpError(
-        502,
-        "The SEC returned invalid financial data. Please try again shortly."
-      );
-    }
+    if (!output) throw unsupportedCompany();
 
-    const output = analyzeFacts(facts);
-
-    if (!output) {
-      throw unsupportedCompanyError();
-    }
-
-    // Filing-detail failures do not stop the core financial analysis.
     output.events = await addEventDetails(
       eventsFrom(submissions, company.cik_str)
     );
 
-    // Gemini is optional. If it fails, return the computed SEC analysis.
-    const ai = await aiWrite(company.title, output);
+    output.earningsReports = earningsReportsFrom(
+      submissions,
+      company.cik_str
+    );
 
-    res.setHeader("Cache-Control", "no-store");
+    output.quarters = output.quarters.map(quarter => {
+      const report = output.earningsReports.find(item =>
+        near(d(item.periodEnd), d(quarter.end), 7)
+      );
 
-    // The request succeeded, so keep the daily reservation if enabled.
-    dailyReservationKey = null;
+      return {
+        ...quarter,
+        periodLabel: `Quarter ended ${quarter.end}`,
+        reportedDate: report?.filedDate || null,
+        filingForm: report?.form || null,
+        filingUrl: report?.url || null
+      };
+    });
 
-    return res.status(200).json({
+    const companySource = await companySourceFrom(
+      submissions,
+      company.cik_str
+    );
+
+    const ai = await aiWrite(
+      company.title,
+      output,
+      companySource,
+      submissions?.sicDescription || ""
+    );
+
+    // Only a successful analysis consumes a daily slot.
+    // Leave the Redis reservation in place until its UTC expiry.
+    res.status(200).json({
       ticker,
       name: company.title,
       ...output,
       ...(ai || {})
     });
 
-  } catch (err) {
-    if (dailyReservationKey) {
-      try {
-        await releaseDailyAnalysis(dailyReservationKey);
-      } catch (releaseError) {
-        console.error(
-          "Could not release failed analysis reservation:",
-          releaseError.message
-        );
-      }
+    reservationKey = null;
+  } catch (error) {
+    if (reservationKey) {
+      await releaseDailyAnalysis(reservationKey);
+      reservationKey = null;
     }
 
-    const status =
-      Number.isInteger(err.status) ? err.status : 500;
+    if (error instanceof HttpError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
 
-    const message =
-      status === 500
-        ? "Something went wrong while analyzing this company. Check the Vercel function logs for details."
-        : err.message;
-
-    console.error("Plainvest API error:", status, err.stack || err.message);
-
-    res.setHeader("Cache-Control", "no-store");
-
-    return res.status(status).json({
-      error: message
+    console.error("Plainvest analysis failed:", error);
+    res.status(500).json({
+      error: "Something went wrong. Try again."
     });
   }
 }
 
-module.exports = handler;
-module.exports.analyzeFacts = analyzeFacts;
-module.exports.eventsFrom = eventsFrom;
+export { analyzeFacts, eventsFrom, earningsReportsFrom };
