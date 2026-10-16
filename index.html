@@ -6,175 +6,481 @@
 <title>Plainvest: stocks explained in plain English</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+
 <style>
 :root {
-  --bg: #f2f5f7;
-  --card: #fff;
-  --ink: #12202b;
-  --mute: #566673;
-  --line: #d8e0e6;
-  --acc: #0e6f8f;
-  --acc-ink: #fff;
-  --good: #1f6b43;
-  --goodbg: #e1f2e8;
-  --warn: #85590c;
-  --warnbg: #faefd6;
-  --bad: #8f2433;
-  --badbg: #f9e1e5;
+  --bg:#f2f5f7;
+  --card:#ffffff;
+  --ink:#12202b;
+  --mute:#566673;
+  --line:#d8e0e6;
+  --acc:#0e6f8f;
+  --acc-ink:#ffffff;
+  --good:#1f6b43;
+  --goodbg:#e1f2e8;
+  --warn:#85590c;
+  --warnbg:#faefd6;
+  --bad:#8f2433;
+  --badbg:#f9e1e5;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
 }
-@media (prefers-color-scheme: dark) {
+
+@media (prefers-color-scheme:dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e171d;
-    --card: #16232c;
-    --ink: #e8eff3;
-    --mute: #9db0bc;
-    --line: #2a3b47;
-    --acc: #5cc3e0;
-    --acc-ink: #0e171d;
-    --good: #7fdba5;
-    --goodbg: #173a28;
-    --warn: #f0c46a;
-    --warnbg: #3b2f14;
-    --bad: #f2a0ac;
-    --badbg: #411c24;
+    --bg:#0e171d;
+    --card:#16232c;
+    --ink:#e8eff3;
+    --mute:#9db0bc;
+    --line:#2a3b47;
+    --acc:#5cc3e0;
+    --acc-ink:#0e171d;
+    --good:#7fdba5;
+    --goodbg:#173a28;
+    --warn:#f0c46a;
+    --warnbg:#3b2f14;
+    --bad:#f2a0ac;
+    --badbg:#411c24;
   }
 }
+
 :root[data-theme="dark"] {
-  --bg: #0e171d;
-  --card: #16232c;
-  --ink: #e8eff3;
-  --mute: #9db0bc;
-  --line: #2a3b47;
-  --acc: #5cc3e0;
-  --acc-ink: #0e171d;
-  --good: #7fdba5;
-  --goodbg: #173a28;
-  --warn: #f0c46a;
-  --warnbg: #3b2f14;
-  --bad: #f2a0ac;
-  --badbg: #411c24;
+  --bg:#0e171d;
+  --card:#16232c;
+  --ink:#e8eff3;
+  --mute:#9db0bc;
+  --line:#2a3b47;
+  --acc:#5cc3e0;
+  --acc-ink:#0e171d;
+  --good:#7fdba5;
+  --goodbg:#173a28;
+  --warn:#f0c46a;
+  --warnbg:#3b2f14;
+  --bad:#f2a0ac;
+  --badbg:#411c24;
 }
-html {
-  box-sizing: border-box;
-  scroll-padding-top: env(safe-area-inset-top, 0px);
-}
-* { box-sizing: border-box; }
+
+* { box-sizing:border-box; }
+
+html { scroll-padding-top:env(safe-area-inset-top,0px); }
+
 body {
-  margin: 0;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: var(--bg);
-  color: var(--ink);
-  font: 17px/1.6 "DM Sans", system-ui, sans-serif;
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font:17px/1.6 "DM Sans",system-ui,sans-serif;
 }
-.wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
-h1, h2, h3 {
-  font-family: "Bricolage Grotesque", "DM Sans", system-ui, sans-serif;
-  line-height: 1.15;
-  margin: 0;
+
+.wrap {
+  max-width:860px;
+  margin:0 auto;
+  padding:0 20px;
 }
-nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; }
-.logo { font: 700 22px "Bricolage Grotesque", sans-serif; color: var(--acc); }
-.nav-note { color: var(--mute); font-size: 14px; }
-header.hero { padding: 28px 0 32px; }
-h1 { font-size: clamp(34px, 7vw, 58px); letter-spacing: -.02em; max-width: 14ch; }
-.sub { color: var(--mute); max-width: 52ch; margin: 16px 0 28px; font-size: 18px; }
-.demo { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
-.demo label { font-weight: 700; display: block; margin-bottom: 8px; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+h1,h2,h3 {
+  font-family:"Bricolage Grotesque","DM Sans",system-ui,sans-serif;
+  line-height:1.15;
+  margin:0;
+}
+
+nav {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:20px 0;
+}
+
+.logo {
+  font:700 22px "Bricolage Grotesque",sans-serif;
+  color:var(--acc);
+}
+
+.nav-note {
+  color:var(--mute);
+  font-size:14px;
+}
+
+header.hero { padding:28px 0 32px; }
+
+h1 {
+  font-size:clamp(34px,7vw,58px);
+  letter-spacing:-.02em;
+  max-width:14ch;
+}
+
+.sub {
+  color:var(--mute);
+  max-width:52ch;
+  margin:16px 0 28px;
+  font-size:18px;
+}
+
+.demo {
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:20px;
+}
+
+.demo label {
+  font-weight:700;
+  display:block;
+  margin-bottom:8px;
+}
+
+.row {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
 input {
-  flex: 1;
-  min-width: 140px;
-  font: inherit;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--ink);
-  text-transform: uppercase;
+  flex:1;
+  min-width:140px;
+  font:inherit;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--bg);
+  color:var(--ink);
+  text-transform:uppercase;
 }
+
 button {
-  font: inherit;
-  font-weight: 700;
-  border: 0;
-  border-radius: 10px;
-  padding: 12px 18px;
-  background: var(--acc);
-  color: var(--acc-ink);
-  cursor: pointer;
+  font:inherit;
+  font-weight:700;
+  border:0;
+  border-radius:10px;
+  padding:12px 18px;
+  background:var(--acc);
+  color:var(--acc-ink);
+  cursor:pointer;
 }
+
 button.chip {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--line);
-  padding: 8px 12px;
-  font-weight: 500;
+  background:transparent;
+  color:var(--ink);
+  border:1px solid var(--line);
+  padding:8px 12px;
+  font-weight:500;
 }
-button.chip:hover, button.chip[aria-pressed="true"] { border-color: var(--acc); color: var(--acc); }
-button:focus-visible, input:focus-visible { outline: 3px solid var(--acc); outline-offset: 2px; }
-.chips { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--mute); font-size: 14px; }
-#msg { margin: 12px 0 0; color: var(--bad); font-size: 15px; min-height: 1px; }
-#result { margin-top: 20px; }
-.head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; margin-bottom: 6px; }
-.head h2 { font-size: 28px; }
-.tag { color: var(--mute); font-size: 15px; }
-.summary { font-size: 19px; margin: 12px 0 20px; padding-left: 14px; border-left: 4px solid var(--acc); }
-.check { display: grid; grid-template-columns: 1fr; gap: 6px; padding: 16px 0; border-top: 1px solid var(--line); }
-.ctop { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
-.ctop h3 { font-size: 19px; }
-.jargon { color: var(--mute); font-size: 13px; }
-.pill { font-size: 14px; font-weight: 700; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
-.na { background: var(--bg); color: var(--mute); }
-.good { background: var(--goodbg); color: var(--good); }
-.warn { background: var(--warnbg); color: var(--warn); }
-.bad { background: var(--badbg); color: var(--bad); }
-.check p { margin: 0; }
-.event-explanation { margin-top: 8px; display: grid; gap: 8px; }
-.event-explanation p { margin: 0; }
-.event-explanation strong { color: var(--ink); }
-.event-details { margin-top: 8px; font-size: 14px; }
-.event-details summary { color: var(--acc); cursor: pointer; }
-.risks { border-top: 1px solid var(--line); padding-top: 16px; }
-.risks h3 { font-size: 19px; margin-bottom: 6px; }
-.risks ul { margin: 0; padding-left: 20px; }
-.note { margin-top: 18px; font-size: 14px; color: var(--mute); background: var(--bg); border-radius: 10px; padding: 12px 14px; }
-section.how { padding: 44px 0 20px; }
-section.how h2 { font-size: 30px; margin-bottom: 16px; }
-.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; }
-.cols h3 { font-size: 19px; margin-bottom: 6px; }
-.cols p { margin: 0; color: var(--mute); }
-footer { padding: 32px 0 48px; color: var(--mute); font-size: 14px; border-top: 1px solid var(--line); margin-top: 36px; }
-.sec { font-size: 20px; margin: 24px 0 4px; }
-.tw { overflow-x: auto; max-width: 100%; }
-.qt { border-collapse: collapse; width: 100%; font-size: 15px; white-space: nowrap; }
-.qt th, .qt td { text-align: right; padding: 8px 10px; border-top: 1px solid var(--line); }
-.qt th:first-child, .qt td:first-child { text-align: left; }
-.qt th { color: var(--mute); font-weight: 500; font-size: 13px; border-top: 0; }
-.pos { color: var(--good); }
-.neg { color: var(--bad); }
-a { color: var(--acc); }
-@media (prefers-reduced-motion: no-preference) {
-  #result > * { animation: in .25s ease-out; }
-  @keyframes in { from { opacity: 0; } to { opacity: 1; } }
+
+button.chip:hover,
+button.chip[aria-pressed="true"] {
+  border-color:var(--acc);
+  color:var(--acc);
 }
-.about { font-size: 18px; margin: 10px 0 2px; }
-.loading { padding: 8px 0; }
-.loading p { margin: 10px 0; color: var(--mute); }
-.spin { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--acc); border-radius: 50%; }
-.sk i { display: block; height: 14px; border-radius: 7px; background: var(--line); margin: 10px 0; }
-.sk i:nth-child(2) { width: 80%; }
-.sk i:nth-child(3) { width: 60%; }
-button:disabled { opacity: .6; cursor: wait; }
-@media (prefers-reduced-motion: no-preference) {
-  .spin { animation: sp .8s linear infinite; }
-  .sk i { animation: pl 1.2s ease-in-out infinite alternate; }
-  @keyframes sp { to { transform: rotate(360deg); } }
-  @keyframes pl { from { opacity: .4; } to { opacity: 1; } }
+
+button:focus-visible,
+input:focus-visible {
+  outline:3px solid var(--acc);
+  outline-offset:2px;
+}
+
+button:disabled {
+  opacity:.6;
+  cursor:wait;
+}
+
+.chips {
+  margin-top:12px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+  color:var(--mute);
+  font-size:14px;
+}
+
+#msg {
+  margin:12px 0 0;
+  color:var(--bad);
+  font-size:15px;
+  min-height:1px;
+}
+
+#result { margin-top:20px; }
+
+.head {
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:baseline;
+  margin-bottom:6px;
+}
+
+.head h2 { font-size:28px; }
+
+.tag {
+  color:var(--mute);
+  font-size:15px;
+}
+
+.summary {
+  font-size:19px;
+  margin:12px 0 20px;
+  padding-left:14px;
+  border-left:4px solid var(--acc);
+}
+
+.about {
+  font-size:16px;
+  color:var(--mute);
+  margin:10px 0 24px;
+}
+
+.sec {
+  font-size:22px;
+  margin:28px 0 12px;
+}
+
+.check {
+  display:grid;
+  grid-template-columns:1fr;
+  gap:6px;
+  padding:16px 0;
+  border-top:1px solid var(--line);
+}
+
+.ctop {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.ctop h3 { font-size:19px; }
+
+.jargon {
+  color:var(--mute);
+  font-size:13px;
+}
+
+.pill {
+  font-size:14px;
+  font-weight:700;
+  padding:3px 10px;
+  border-radius:99px;
+  white-space:nowrap;
+}
+
+.na { background:var(--bg); color:var(--mute); }
+.good { background:var(--goodbg); color:var(--good); }
+.warn { background:var(--warnbg); color:var(--warn); }
+.bad { background:var(--badbg); color:var(--bad); }
+
+.check p { margin:0; }
+
+.event-explanation {
+  margin-top:8px;
+  display:grid;
+  gap:8px;
+}
+
+.event-explanation p { margin:0; }
+.event-explanation strong { color:var(--ink); }
+.event-details { margin-top:8px; font-size:14px; }
+.event-details summary { color:var(--acc); cursor:pointer; }
+
+.risks {
+  border-top:1px solid var(--line);
+  padding-top:16px;
+  margin-top:24px;
+}
+
+.risks h3 {
+  font-size:19px;
+  margin-bottom:6px;
+}
+
+.risks ul {
+  margin:0;
+  padding-left:20px;
+}
+
+.note {
+  margin-top:18px;
+  font-size:14px;
+  color:var(--mute);
+  background:var(--bg);
+  border-radius:10px;
+  padding:12px 14px;
+}
+
+section.how { padding:44px 0 20px; }
+section.how h2 { font-size:30px; margin-bottom:16px; }
+
+.cols {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:24px;
+}
+
+.cols h3 { font-size:19px; margin-bottom:6px; }
+.cols p { margin:0; color:var(--mute); }
+
+footer {
+  padding:32px 0 48px;
+  color:var(--mute);
+  font-size:14px;
+  border-top:1px solid var(--line);
+  margin-top:36px;
+}
+
+.tw { overflow-x:auto; max-width:100%; }
+
+.qt {
+  border-collapse:collapse;
+  width:100%;
+  font-size:15px;
+  white-space:nowrap;
+}
+
+.qt th,.qt td {
+  text-align:right;
+  padding:8px 10px;
+  border-top:1px solid var(--line);
+}
+
+.qt th:first-child,.qt td:first-child { text-align:left; }
+
+.qt th {
+  color:var(--mute);
+  font-weight:500;
+  font-size:13px;
+  border-top:0;
+}
+
+.pos { color:var(--good); }
+.neg { color:var(--bad); }
+a { color:var(--acc); }
+
+/* Quarterly revenue and profit chart */
+.chart-card {
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--card);
+  padding:16px;
+  margin:14px 0 22px;
+  overflow:hidden;
+}
+
+.chart-legend {
+  display:flex;
+  gap:18px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+  font-size:13px;
+  color:var(--mute);
+}
+
+.legend-item {
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+
+.legend-dot {
+  width:10px;
+  height:10px;
+  border-radius:3px;
+  display:inline-block;
+}
+
+.revenue-dot { background:#2584a5; }
+.profit-dot { background:#69b69b; }
+.loss-dot { background:#d56a78; }
+
+.chart-scroll {
+  width:100%;
+  overflow-x:auto;
+  overflow-y:hidden;
+}
+
+.quarter-chart {
+  display:block;
+  width:100%;
+  min-width:320px;
+  height:auto;
+  overflow:visible;
+}
+
+.chart-label {
+  fill:var(--mute);
+  font-family:"DM Sans",sans-serif;
+  font-size:11px;
+}
+
+.chart-grid {
+  stroke:var(--line);
+  stroke-width:1;
+}
+
+.chart-zero {
+  stroke:var(--mute);
+  stroke-width:1.2;
+  stroke-dasharray:4 4;
+}
+
+.chart-empty {
+  color:var(--mute);
+  font-size:14px;
+  padding:18px 0;
+}
+
+.chart-tooltip {
+  margin-top:10px;
+  color:var(--mute);
+  font-size:13px;
+}
+
+.loading { padding:8px 0; }
+.loading p { margin:10px 0; color:var(--mute); }
+
+.spin {
+  width:28px;
+  height:28px;
+  border:3px solid var(--line);
+  border-top-color:var(--acc);
+  border-radius:50%;
+}
+
+.sk i {
+  display:block;
+  height:14px;
+  border-radius:7px;
+  background:var(--line);
+  margin:10px 0;
+}
+
+.sk i:nth-child(2) { width:80%; }
+.sk i:nth-child(3) { width:60%; }
+
+@media (prefers-reduced-motion:no-preference) {
+  #result>* { animation:fade-in .25s ease-out; }
+  .spin { animation:spin .8s linear infinite; }
+  .sk i { animation:pulse 1.2s ease-in-out infinite alternate; }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes pulse { from { opacity:.4; } to { opacity:1; } }
+  @keyframes fade-in { from { opacity:0; } to { opacity:1; } }
+}
+
+@media (max-width:480px) {
+  .demo { padding:15px; }
+  .chart-card { padding:10px; }
+  .head h2 { font-size:24px; }
+  .sec { font-size:20px; }
 }
 </style>
 </head>
+
 <body>
 <div class="wrap">
+
 <nav>
   <span class="logo">Plainvest</span>
   <span class="nav-note">Beta</span>
@@ -182,20 +488,27 @@ button:disabled { opacity: .6; cursor: wait; }
 
 <header class="hero">
   <h1>Understand a stock before you buy it.</h1>
-  <p class="sub">Type a ticker. Get a plain-English read on how the company makes money, whether it's profitable, how much it owes, and what could go wrong. No finance degree needed.</p>
+  <p class="sub">
+    Type a ticker. Get a plain-English read on how the company makes money,
+    whether it's profitable, how much it owes, and what could go wrong.
+    No finance degree needed.
+  </p>
 
   <div class="demo">
     <label for="t">Look up a US-listed company</label>
+
     <div class="row">
       <input id="t" maxlength="6" placeholder="e.g. AAPL" autocomplete="off" aria-describedby="msg">
       <button id="go">Explain it</button>
     </div>
+
     <div class="chips">
       <span>Try:</span>
       <button class="chip" data-t="AAPL">AAPL</button>
       <button class="chip" data-t="KO">KO</button>
       <button class="chip" data-t="TSLA">TSLA</button>
     </div>
+
     <p id="msg" role="status"></p>
     <div id="result" aria-live="polite"></div>
   </div>
@@ -204,36 +517,95 @@ button:disabled { opacity: .6; cursor: wait; }
 <section class="how">
   <h2>What you get</h2>
   <div class="cols">
-    <div><h3>Jargon, translated</h3><p>Every number comes with its technical name and what it means for you.</p></div>
-    <div><h3>Four quick checks</h3><p>Profit, debt, growth, and cash, each with a clear good, watch, or concern label.</p></div>
-    <div><h3>Risks up front</h3><p>The biggest things that could hurt the company, stated plainly.</p></div>
+    <div>
+      <h3>Jargon, translated</h3>
+      <p>Every number comes with its technical name and what it means for you.</p>
+    </div>
+    <div>
+      <h3>Four quick checks</h3>
+      <p>Profit, debt, growth, and cash, each with a clear good, watch, or concern label.</p>
+    </div>
+    <div>
+      <h3>Risks up front</h3>
+      <p>The biggest things that could hurt the company, stated plainly.</p>
+    </div>
   </div>
 </section>
 
 <footer>
-  <p>Plainvest explains public company information for education. It does not give investment advice or tell you what to buy or sell. Figures come from public SEC filings and may lag recent events.</p>
+  <p>
+    Plainvest explains public company information for education. It does not give
+    investment advice or tell you what to buy or sell. Figures come from public
+    SEC filings and may lag recent events.
+  </p>
 </footer>
+
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-const L = {good:"Looks good",warn:"Watch this",bad:"Concern",na:"Not enough data"};
-const K = {positive:["good","Positive"],negative:["bad","Negative"],watch:["warn","Watch"],event:["na","Event"]};
 
-const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const mn = v => {
-  if (v == null) return "–";
-  const a = Math.abs(v), s = v < 0 ? "-" : "";
-  return a >= 1e9 ? s+"$"+(a/1e9).toFixed(1)+"B" :
-    a >= 1e6 ? s+"$"+(a/1e6).toFixed(0)+"M" :
-    s+"$"+Math.round(a).toLocaleString("en-US");
+const L = {
+  good:"Looks good",
+  warn:"Watch this",
+  bad:"Concern",
+  na:"Not enough data"
 };
-const pc = x => x == null ? "–" : (x >= 0 ? "+" : "")+(x*100).toFixed(0)+"%";
-const sg = v => v == null ? "" : v < 0 ? "neg" : "pos";
-const qn = e => new Date(e+"T00:00:00Z").toLocaleString("en-US",{month:"short",year:"numeric",timeZone:"UTC"});
 
-const card = (t,kind,body) =>
-  `<div class="check"><div class="ctop"><h3>${esc(t)}</h3><span class="pill ${kind[0]}">${kind[1]}</span></div>${body}</div>`;
+const K = {
+  positive:["good","Positive"],
+  negative:["bad","Negative"],
+  watch:["warn","Watch"],
+  event:["na","Event"]
+};
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g,c=>({
+  "&":"&amp;",
+  "<":"&lt;",
+  ">":"&gt;",
+  '"':"&quot;"
+}[c]));
+
+const mn = v => {
+  if (v == null || !Number.isFinite(Number(v))) return "–";
+  v = Number(v);
+  const a = Math.abs(v);
+  const s = v < 0 ? "-$" : "$";
+
+  if (a >= 1e12) return s + (a/1e12).toFixed(2) + "T";
+  if (a >= 1e9) return s + (a/1e9).toFixed(2) + "B";
+  if (a >= 1e6) return s + (a/1e6).toFixed(0) + "M";
+  return s + Math.round(a).toLocaleString("en-US");
+};
+
+const pc = x => {
+  if (x == null || !Number.isFinite(Number(x))) return "–";
+  x = Number(x);
+  return (x >= 0 ? "+" : "") + (x*100).toFixed(0) + "%";
+};
+
+const sg = v => v == null ? "" : Number(v) < 0 ? "neg" : "pos";
+
+const qn = e => {
+  if (!e) return "–";
+  const date = new Date(e + "T00:00:00Z");
+  if (Number.isNaN(date.getTime())) return String(e);
+  return date.toLocaleString("en-US",{
+    month:"short",
+    year:"numeric",
+    timeZone:"UTC"
+  });
+};
+
+const card = (t,kind,body) => `
+  <div class="check">
+    <div class="ctop">
+      <h3>${esc(t)}</h3>
+      <span class="pill ${kind[0]}">${kind[1]}</span>
+    </div>
+    ${body}
+  </div>
+`;
 
 const busy = b => {
   $("go").disabled = b;
@@ -246,16 +618,185 @@ function eventField(e,key) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+/*
+  Draws a responsive SVG chart.
+  Revenue bars rise from zero. Profit bars rise above zero when positive
+  and extend below zero when negative.
+*/
+function makeQuarterChart(quarters) {
+  const data = (quarters || [])
+    .filter(q => q && q.end)
+    .slice(-8);
+
+  if (!data.length) {
+    return `
+      <div class="chart-card">
+        <p class="chart-empty">
+          Quarterly chart data isn't available for this company yet.
+        </p>
+      </div>
+    `;
+  }
+
+  const W = Math.max(360, data.length * 76 + 48);
+  const H = 270;
+  const left = 42;
+  const right = 12;
+  const top = 16;
+  const bottom = 42;
+  const plotW = W - left - right;
+  const plotH = H - top - bottom;
+
+  const vals = data.flatMap(q => [
+    Number(q.sales) || 0,
+    Number(q.profit) || 0
+  ]);
+
+  const maxVal = Math.max(1, ...vals, 0);
+  const minVal = Math.min(0, ...vals);
+  const range = Math.max(1, maxVal - minVal);
+  const paddedMax = maxVal + range * 0.08;
+  const paddedMin = minVal - range * 0.08;
+  const fullRange = paddedMax - paddedMin;
+
+  const y = v => top + ((paddedMax - v) / fullRange) * plotH;
+  const zeroY = y(0);
+  const slot = plotW / data.length;
+  const barW = Math.min(23, slot * 0.29);
+  const gap = Math.min(5, slot * 0.06);
+
+  let grid = "";
+  for (let i=0; i<=4; i++) {
+    const val = paddedMax - (fullRange * i / 4);
+    const yy = y(val);
+
+    grid += `
+      <line x1="${left}" y1="${yy}" x2="${W-right}" y2="${yy}"
+        class="chart-grid"/>
+      <text x="${left-6}" y="${yy+4}" text-anchor="end" class="chart-label">
+        ${esc(axisValue(val))}
+      </text>
+    `;
+  }
+
+  let bars = "";
+
+  data.forEach((q,i) => {
+    const center = left + slot * (i + 0.5);
+    const revenue = Number(q.sales) || 0;
+    const profit = q.profit == null ? null : Number(q.profit);
+    const revX = center - barW - gap/2;
+    const profitX = center + gap/2;
+
+    const revY = y(Math.max(0,revenue));
+    const revHeight = Math.max(0,zeroY-revY);
+
+    bars += `
+      <rect
+        x="${revX}"
+        y="${revY}"
+        width="${barW}"
+        height="${Math.max(0.8,revHeight)}"
+        rx="5"
+        ry="5"
+        fill="#2584a5">
+        <title>${esc(qn(q.end))} revenue: ${esc(mn(revenue))}</title>
+      </rect>
+    `;
+
+    if (profit !== null && Number.isFinite(profit)) {
+      const profitY = y(Math.max(0,profit));
+      const profitBottom = y(Math.min(0,profit));
+      const profitHeight = Math.max(0.8,profitBottom-profitY);
+      const profitColor = profit < 0 ? "#d56a78" : "#69b69b";
+
+      bars += `
+        <rect
+          x="${profitX}"
+          y="${profitY}"
+          width="${barW}"
+          height="${profitHeight}"
+          rx="5"
+          ry="5"
+          fill="${profitColor}">
+          <title>${esc(qn(q.end))} profit: ${esc(mn(profit))}</title>
+        </rect>
+      `;
+    }
+
+    bars += `
+      <text x="${center}" y="${H-17}" text-anchor="middle" class="chart-label">
+        ${esc(qn(q.end))}
+      </text>
+    `;
+  });
+
+  return `
+    <div class="chart-card">
+      <div class="chart-legend">
+        <span class="legend-item">
+          <span class="legend-dot revenue-dot"></span> Revenue
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot profit-dot"></span> Profit
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot loss-dot"></span> Loss
+        </span>
+      </div>
+
+      <div class="chart-scroll">
+        <svg
+          class="quarter-chart"
+          viewBox="0 0 ${W} ${H}"
+          role="img"
+          aria-label="Quarterly revenue and profit chart">
+          ${grid}
+          <line
+            x1="${left}"
+            y1="${zeroY}"
+            x2="${W-right}"
+            y2="${zeroY}"
+            class="chart-zero"/>
+          ${bars}
+        </svg>
+      </div>
+
+      <p class="chart-tooltip">
+        Hover over a bar to see its exact value. Profit below zero means the
+        company reported a loss for that quarter.
+      </p>
+    </div>
+  `;
+}
+
+function axisValue(v) {
+  const a = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+
+  if (a >= 1e12) return sign + "$" + (a/1e12).toFixed(1) + "T";
+  if (a >= 1e9) return sign + "$" + (a/1e9).toFixed(1) + "B";
+  if (a >= 1e6) return sign + "$" + (a/1e6).toFixed(0) + "M";
+  if (a >= 1000) return sign + "$" + (a/1000).toFixed(0) + "K";
+
+  return sign + "$" + Math.round(a);
+}
+
 async function run(k) {
   k = (k || $("t").value).trim().toUpperCase();
-  const r = $("result"), m = $("msg");
+
+  const r = $("result");
+  const m = $("msg");
+
   m.textContent = "";
+  m.style.color = "var(--bad)";
   r.innerHTML = "";
 
   if (!k) {
     m.textContent = "Enter a ticker, like AAPL.";
     return;
   }
+
   if ($("go").disabled) return;
 
   $("t").value = k;
@@ -267,9 +808,18 @@ async function run(k) {
     "Checking recent announcements...",
     "Writing it up in plain English..."
   ];
+
   let i = 0;
 
-  r.innerHTML = `<div class="loading" role="status"><div class="spin" aria-hidden="true"></div><p id="lm">${msgs[0]}</p><div class="sk" aria-hidden="true"><i></i><i></i><i></i></div></div>`;
+  r.innerHTML = `
+    <div class="loading" role="status">
+      <div class="spin" aria-hidden="true"></div>
+      <p id="lm">${msgs[0]}</p>
+      <div class="sk" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </div>
+    </div>
+  `;
 
   const tm = setInterval(() => {
     i = Math.min(i+1,msgs.length-1);
@@ -280,15 +830,18 @@ async function run(k) {
   busy(true);
 
   try {
-    const res = await fetch("/api/analyze?ticker="+encodeURIComponent(k), {
-      cache: "no-store"
-    });
+    const res = await fetch("/api/analyze?ticker=" + encodeURIComponent(k));
     const d = await res.json();
 
     if (!res.ok) {
       if (res.status === 404 || res.status === 422) {
         m.textContent = "";
-        r.innerHTML = `<p class="note">${esc(d.error)} Try a US company like AAPL, KO, or TSLA.</p>`;
+        r.innerHTML = `
+          <p class="note">
+            ${esc(d.error || "This ticker couldn't be analyzed.")}
+            Try a US company like AAPL, KO, or TSLA.
+          </p>
+        `;
       } else {
         r.innerHTML = "";
         m.style.color = "var(--bad)";
@@ -299,13 +852,27 @@ async function run(k) {
 
     m.textContent = "";
 
-    const qs = (d.quarters || []).map(q =>
-      `<tr><td>${qn(q.end)}</td><td>${mn(q.sales)}</td><td class="${sg(q.salesYoY)}">${pc(q.salesYoY)}</td><td class="${sg(q.profit)}">${mn(q.profit)}</td><td>${q.margin == null ? "–" : (q.margin*100).toFixed(1)+"%"}</td><td class="${sg(q.cash)}">${mn(q.cash)}</td></tr>`
-    ).join("");
+    const quarters = d.quarters || [];
+
+    const qs = quarters.map(q => `
+      <tr>
+        <td>${qn(q.end)}</td>
+        <td>${mn(q.sales)}</td>
+        <td class="${sg(q.salesYoY)}">${pc(q.salesYoY)}</td>
+        <td class="${sg(q.profit)}">${mn(q.profit)}</td>
+        <td>${q.margin == null ? "–" : (q.margin*100).toFixed(1)+"%"}</td>
+        <td class="${sg(q.cash)}">${mn(q.cash)}</td>
+      </tr>
+    `).join("");
 
     const sig = (d.signals || []).map(s =>
-      card(s.title,K[s.kind] || K.event,`<p>${esc(s.text)}</p>`)
-    ).join("") || `<p class="jargon">No big swings stood out in the latest quarter's numbers.</p>`;
+      card(
+        s.title,
+        K[s.kind] || K.event,
+        `<p>${esc(s.text)}</p>`
+      )
+    ).join("") ||
+      `<p class="jargon">No big swings stood out in the latest quarter's numbers.</p>`;
 
     const ev = (d.events || []).map(e => {
       const what = eventField(e,"whatHappened");
@@ -313,7 +880,9 @@ async function run(k) {
       const impact = eventField(e,"potentialImpact");
       const uncertain = eventField(e,"uncertainty");
       const details = typeof e.details === "string" ? e.details.trim() : "";
+
       const date = e.date ? `<span>${esc(e.date)}</span>` : "";
+
       const link = e.url && e.url.startsWith("https://www.sec.gov/")
         ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
         : "";
@@ -328,7 +897,12 @@ async function run(k) {
             ? `<p class="jargon">An explanation isn't available for this announcement yet.</p>`
             : ""}
         </div>
-        ${details ? `<details class="event-details"><summary>Additional filing details</summary><p>${esc(details)}</p></details>` : ""}
+        ${details ? `
+          <details class="event-details">
+            <summary>Additional filing details</summary>
+            <p>${esc(details)}</p>
+          </details>
+        ` : ""}
       `;
 
       return card(
@@ -336,24 +910,85 @@ async function run(k) {
         K[e.kind] || K.event,
         `${date ? `<p class="jargon">${date}${link}</p>` : ""}${explanation}`
       );
-    }).join("") || `<p class="jargon">No notable announcements in the past year.</p>`;
+    }).join("") ||
+      `<p class="jargon">No notable announcements in the past year.</p>`;
+
+    const description = typeof d.companyDescription === "string"
+      ? d.companyDescription.trim()
+      : "";
 
     r.innerHTML = `
-      <div class="head"><h2>${esc(d.name)} (${esc(d.ticker)})</h2><span class="tag">${esc(d.periodLabel || "")}</span></div>
-      <p class="summary">${esc(d.summary)}</p>
-      <h3 class="sec">Quarter by quarter</h3>
-      <div class="tw"><table class="qt"><thead><tr><th>Quarter</th><th>Sales</th><th>vs year ago</th><th>Profit</th><th>Margin</th><th>Cash</th></tr></thead><tbody>${qs}</tbody></table></div>
-      <h3 class="sec">What changed in the numbers</h3>${sig}
-      <h3 class="sec">Recent company announcements</h3>${ev}
-      <p class="note">These announcements are based on company filings with the SEC. Explanations describe why an announcement may matter, not a guaranteed outcome for the stock. They may not include news, analyst views, or upcoming events.</p>
-      <h3 class="sec">Four quick checks (latest quarter)</h3>
-    ` +
-    (d.checks || []).map(c =>
-      `<div class="check"><div class="ctop"><h3>${esc(c.title)}</h3><span class="pill ${esc(c.status)}">${L[c.status] || L.na}</span></div><span class="jargon">Technical name: ${esc(c.jargon)}</span><p>${esc(c.text)}</p></div>`
-    ).join("") +
-    `<div class="risks"><h3>What could go wrong</h3><ul>${(d.risks || []).map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
-    <p class="note">Based on the company's quarterly filings with the SEC. Education only, not investment advice.</p>`;
+      <div class="head">
+        <h2>${esc(d.name)} (${esc(d.ticker)})</h2>
+        <span class="tag">${esc(d.periodLabel || "")}</span>
+      </div>
 
+      ${description ? `
+        <p class="about">${esc(description)}</p>
+      ` : ""}
+
+      <p class="summary">${esc(d.summary || "")}</p>
+
+      <h3 class="sec">Revenue and profit over time</h3>
+      ${makeQuarterChart(quarters)}
+
+      <h3 class="sec">Quarter by quarter</h3>
+      <div class="tw">
+        <table class="qt">
+          <thead>
+            <tr>
+              <th>Quarter</th>
+              <th>Sales</th>
+              <th>vs year ago</th>
+              <th>Profit</th>
+              <th>Margin</th>
+              <th>Cash</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${qs || `<tr><td colspan="6">Quarterly figures aren't available.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sec">What changed in the numbers</h3>
+      ${sig}
+
+      <h3 class="sec">Recent company announcements</h3>
+      ${ev}
+
+      <p class="note">
+        These announcements are based on company filings with the SEC.
+        Explanations describe why an announcement may matter, not a guaranteed
+        outcome for the stock. They may not include news, analyst views, or
+        upcoming events.
+      </p>
+
+      <h3 class="sec">Four quick checks (latest quarter)</h3>
+
+      ${(d.checks || []).map(c => `
+        <div class="check">
+          <div class="ctop">
+            <h3>${esc(c.title)}</h3>
+            <span class="pill ${esc(c.status)}">${L[c.status] || L.na}</span>
+          </div>
+          <span class="jargon">Technical name: ${esc(c.jargon)}</span>
+          <p>${esc(c.text)}</p>
+        </div>
+      `).join("")}
+
+      <div class="risks">
+        <h3>What could go wrong</h3>
+        <ul>
+          ${(d.risks || []).map(x => `<li>${esc(x)}</li>`).join("")}
+        </ul>
+      </div>
+
+      <p class="note">
+        Based on the company's quarterly filings with the SEC.
+        Education only, not investment advice.
+      </p>
+    `;
   } catch (e) {
     r.innerHTML = "";
     m.style.color = "var(--bad)";
@@ -365,9 +1000,11 @@ async function run(k) {
 }
 
 $("go").onclick = () => run();
+
 $("t").addEventListener("keydown",e => {
   if (e.key === "Enter") run();
 });
+
 document.querySelectorAll(".chip").forEach(b => {
   b.onclick = () => run(b.dataset.t);
 });
