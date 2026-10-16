@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,9 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f2f5f7;--card:#fff;--ink:#12202b;--mute:#566673;--line:#d8e0e6;--acc:#0e6f8f;--acc-ink:#fff;--good:#1f6b43;--goodbg:#e1f2e8;--warn:#85590c;--warnbg:#faefd6;--bad:#8f2433;--badbg:#f9e1e5}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24}}
-:root[data-theme="dark"]{--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24}
+:root{--bg:#f2f5f7;--card:#fff;--ink:#12202b;--mute:#566673;--line:#d8e0e6;--acc:#0e6f8f;--acc-ink:#fff;--good:#1f6b43;--goodbg:#e1f2e8;--warn:#85590c;--warnbg:#faefd6;--bad:#8f2433;--badbg:#f9e1e5;--sales:#2583dc;--profit:#23945b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24;--sales:#58aaff;--profit:#65d99a}}
+:root[data-theme="dark"]{--bg:#0e171d;--card:#16232c;--ink:#e8eff3;--mute:#9db0bc;--line:#2a3b47;--acc:#5cc3e0;--acc-ink:#0e171d;--good:#7fdba5;--goodbg:#173a28;--warn:#f0c46a;--warnbg:#3b2f14;--bad:#f2a0ac;--badbg:#411c24;--sales:#58aaff;--profit:#65d99a}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 "DM Sans",system-ui,sans-serif;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -79,6 +78,33 @@ a{color:var(--acc)}
 .sk i:nth-child(2){width:80%}
 .sk i:nth-child(3){width:60%}
 button:disabled{opacity:.6;cursor:wait}
+
+/* Quarterly revenue and profit chart */
+.chart-card{margin:12px 0 18px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 14px 12px}
+.chart-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.chart-top h3{font-size:18px}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mute)}
+.legend-item{display:inline-flex;align-items:center;gap:6px}
+.legend-dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+.legend-sales{background:var(--sales)}
+.legend-profit{background:var(--profit)}
+.legend-loss{background:var(--bad)}
+.chart-scroll{overflow-x:auto;max-width:100%;padding-bottom:4px}
+.chart-svg{display:block;width:100%;min-width:560px;height:auto;overflow:visible}
+.chart-svg text{font-family:"DM Sans",system-ui,sans-serif;fill:var(--mute);font-size:11px}
+.chart-svg .grid-line{stroke:var(--line);stroke-width:1;stroke-dasharray:3 4}
+.chart-svg .zero-line{stroke:var(--mute);stroke-width:1.2}
+.chart-svg .sales-bar{fill:var(--sales)}
+.chart-svg .profit-bar{fill:var(--profit)}
+.chart-svg .loss-bar{fill:var(--bad)}
+.chart-svg rect{transition:opacity .15s ease}
+.chart-svg rect:hover{opacity:.72}
+.chart-caption{font-size:12px;color:var(--mute);margin:8px 2px 0}
+@media(max-width:540px){
+ .chart-card{padding:13px 10px 10px}
+ .chart-top{align-items:flex-start}
+ .chart-legend{gap:10px}
+}
 @media (prefers-reduced-motion:no-preference){
 #result>*{animation:in .25s ease-out}
 .spin{animation:sp .8s linear infinite}
@@ -190,6 +216,105 @@ function eventField(e,key){
  return typeof v==="string"?v.trim():"";
 }
 
+/*
+ Draw an SVG bar chart from the same quarter data used by the table.
+ Both series share a single scale. Positive profit rises from zero;
+ losses extend below the zero line.
+*/
+function quarterlyChart(quarters){
+ const data=(quarters||[])
+  .filter(q=>q&&q.end&&Number.isFinite(Number(q.sales)))
+  .slice(0,8)
+  .sort((a,b)=>a.end.localeCompare(b.end));
+
+ if(!data.length)return"";
+
+ const maxSales=Math.max(0,...data.map(q=>Number(q.sales)||0));
+ const minValue=Math.min(0,...data.map(q=>q.profit==null?0:Number(q.profit)||0));
+ const maxValue=Math.max(1,maxSales,...data.map(q=>q.profit==null?0:Number(q.profit)||0));
+ const domainMin=minValue<0?minValue:0;
+ const domainMax=maxValue||1;
+ const range=domainMax-domainMin||1;
+
+ const width=Math.max(560,data.length*76+48);
+ const height=230;
+ const left=12,right=12,top=12,bottom=34;
+ const plotHeight=height-top-bottom;
+ const plotWidth=width-left-right;
+ const zeroY=top+(domainMax/range)*plotHeight;
+ const step=plotWidth/data.length;
+ const barWidth=Math.min(17,step*.27);
+ const gap=Math.max(3,step*.06);
+ const y=value=>top+((domainMax-value)/range)*plotHeight;
+ const moneyFull=v=>{
+  if(v==null)return"No data";
+  const n=Number(v);
+  const a=Math.abs(n);
+  const sign=n<0?"-":"";
+  return a>=1e9?sign+"$"+(a/1e9).toFixed(2)+" billion":
+         a>=1e6?sign+"$"+(a/1e6).toFixed(2)+" million":
+         sign+"$"+Math.round(a).toLocaleString("en-US");
+ };
+
+ let grid="";
+ for(let i=0;i<=4;i++){
+  const value=domainMax-(range*i/4);
+  const yy=y(value);
+  grid+=`<line class="grid-line" x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}"></line>`;
+ }
+ grid+=`<line class="zero-line" x1="${left}" y1="${zeroY}" x2="${width-right}" y2="${zeroY}"></line>`;
+
+ let bars="";
+ data.forEach((q,i)=>{
+  const center=left+step*(i+.5);
+  const sales=Number(q.sales)||0;
+  const profit=q.profit==null?null:Number(q.profit);
+  const salesX=center-gap/2-barWidth;
+  const profitX=center+gap/2;
+  const salesY=y(Math.max(0,sales));
+  const salesHeight=Math.max(0,zeroY-salesY);
+  const salesRounded=Math.min(5,barWidth/2,salesHeight/2);
+
+  bars+=`<rect class="sales-bar" x="${salesX}" y="${salesY}" width="${barWidth}" height="${salesHeight}" rx="${salesRounded}" ry="${salesRounded}"><title>${esc(qn(q.end))} revenue: ${esc(moneyFull(sales))}</title></rect>`;
+
+  if(profit!=null){
+   const profitY=y(profit);
+   const profitHeight=Math.max(0,Math.abs(zeroY-profitY));
+   const className=profit<0?"loss-bar":"profit-bar";
+   const rectY=profit<0?zeroY:profitY;
+   const round=Math.min(5,barWidth/2,profitHeight/2);
+   if(profitHeight>0.5){
+    bars+=`<rect class="${className}" x="${profitX}" y="${rectY}" width="${barWidth}" height="${profitHeight}" rx="${round}" ry="${round}"><title>${esc(qn(q.end))} profit/loss: ${esc(moneyFull(profit))}</title></rect>`;
+   }else{
+    bars+=`<rect class="${className}" x="${profitX}" y="${zeroY-1}" width="${barWidth}" height="2" rx="1"><title>${esc(qn(q.end))} profit/loss: ${esc(moneyFull(profit))}</title></rect>`;
+   }
+  }
+
+  const date=new Date(q.end+"T00:00:00Z");
+  const label=date.toLocaleString("en-US",{month:"short",year:"2-digit",timeZone:"UTC"});
+  bars+=`<text x="${center}" y="${height-10}" text-anchor="middle">${esc(label)}</text>`;
+ });
+
+ return`
+ <div class="chart-card">
+  <div class="chart-top">
+   <h3>Revenue and profit</h3>
+   <div class="chart-legend">
+    <span class="legend-item"><i class="legend-dot legend-sales"></i>Revenue</span>
+    <span class="legend-item"><i class="legend-dot legend-profit"></i>Profit</span>
+    <span class="legend-item"><i class="legend-dot legend-loss"></i>Loss</span>
+   </div>
+  </div>
+  <div class="chart-scroll">
+   <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Quarterly revenue and profit or loss bar chart. Hover over bars for exact values.">
+    ${grid}
+    ${bars}
+   </svg>
+  </div>
+  <p class="chart-caption">Quarters run oldest to newest. Bars share one scale; hover over a bar to see its exact value. A bar below the zero line represents a loss.</p>
+ </div>`;
+}
+
 async function run(k){
  k=(k||$("t").value).trim().toUpperCase();
 
@@ -261,7 +386,8 @@ async function run(k){
 
   m.textContent="";
 
-  const qs=(d.quarters||[]).map(q=>`
+  const quarterData=(d.quarters||[]);
+  const qs=quarterData.map(q=>`
    <tr>
     <td>${qn(q.end)}</td>
     <td>${mn(q.sales)}</td>
@@ -270,6 +396,8 @@ async function run(k){
     <td>${q.margin==null?"–":(q.margin*100).toFixed(1)+"%"}</td>
     <td class="${sg(q.cash)}">${mn(q.cash)}</td>
    </tr>`).join("");
+
+  const chart=quarterlyChart(quarterData);
 
   const sig=(d.signals||[]).map(s=>
    card(s.title,K[s.kind]||K.event,`<p>${esc(s.text)}</p>`)
@@ -308,7 +436,6 @@ async function run(k){
    );
   }).join("")||`<p class="jargon">No notable announcements in the past year.</p>`;
 
-  // Display the company description returned by the backend.
   const description=typeof d.companyDescription==="string"
    ?d.companyDescription.trim()
    :"";
@@ -328,6 +455,7 @@ async function run(k){
    ${descriptionHtml}
 
    <h3 class="sec">Quarter by quarter</h3>
+   ${chart}
    <div class="tw">
     <table class="qt">
      <thead>
