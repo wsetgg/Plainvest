@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -102,30 +101,33 @@ a{color:var(--acc)}
 .qt th:first-child,.qt td:first-child{text-align:left}
 .qt th{color:var(--mute);font-weight:500;font-size:13px;border-top:0}
 
-/* Larger chart cards with room for eight quarterly bars */
-.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
+/* One combined revenue/profit chart */
 .chart-card{border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0;background:var(--card)}
 .chart-card h3{font-size:20px;margin-bottom:4px}
 .chart-card p{margin:0;color:var(--mute);font-size:14px}
 .chart-svg{width:100%;height:auto;display:block;overflow:visible;margin-top:12px}
 .chart-label{font:12px "DM Sans",sans-serif;fill:var(--mute)}
 .chart-value{font:11px "DM Sans",sans-serif;font-weight:700;fill:var(--ink)}
-.chart-zero{stroke:var(--mute);stroke-width:1.4;stroke-dasharray:4 3;opacity:.8}
+.chart-zero{stroke:var(--mute);stroke-width:1.5;stroke-dasharray:5 4;opacity:.9}
+.chart-gridline{stroke:var(--line);stroke-width:1}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mute);margin-top:8px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--acc);margin-right:5px}
 .dot.profit{background:var(--good)}
+.dot.loss{background:var(--bad)}
+.chart-tooltip{font-size:13px;color:var(--mute);margin-top:10px}
 .bs-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .bs-card{border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
 .bs-card h3{font-size:18px;margin-bottom:8px}
 .bs-item{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:7px 0;font-size:14px}
-.bs-item span:last-child{text-align:right;font-weight:700}
+.bs-item span:last-child{text-align:right;font-weight:700;overflow-wrap:anywhere}
 .totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:12px 0}
-.total{background:var(--bg);padding:12px;border-radius:10px}
+.total{background:var(--bg);padding:12px;border-radius:10px;min-width:0}
 .total span{display:block;color:var(--mute);font-size:13px}
 .total strong{font-size:17px;overflow-wrap:anywhere}
 @media(max-width:700px){
-  .chart-grid,.bs-grid{grid-template-columns:1fr}
-  .chart-card{padding:15px}
+  .bs-grid{grid-template-columns:1fr}
+  .chart-card{padding:12px}
+  .chart-label{font-size:11px}
 }
 @media(max-width:620px){
   .demo,.panel{padding:15px}
@@ -231,8 +233,19 @@ const pct = value =>
 const sign = value =>
   value == null ? '' : value < 0 ? 'neg' : 'pos';
 
+const validDate = value => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(value + 'T00:00:00Z');
+
+  return Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value;
+};
+
 const quarterName = end => {
-  if (!end) return '–';
+  if (!validDate(end)) return '–';
 
   return new Date(end + 'T00:00:00Z').toLocaleString('en-US', {
     month: 'short',
@@ -253,6 +266,7 @@ const card = (title, kind, body) =>
 function setBusy(value) {
   $('go').disabled = value;
   $('t').disabled = value;
+
   document.querySelectorAll('.chip').forEach(button => {
     button.disabled = value;
   });
@@ -260,6 +274,7 @@ function setBusy(value) {
 
 function eventField(event, key) {
   const explanation = event.explanation;
+
   const value = (
     explanation && typeof explanation === 'object'
       ? explanation[key]
@@ -284,114 +299,163 @@ function shortMoney(value) {
 }
 
 /*
- * Responsive quarterly bar chart.
- * Profit charts use a true zero baseline, so losses extend downward.
- * Extra scale padding keeps value labels away from chart edges.
+ * Combined chart:
+ * - Revenue is displayed as bars using the left scale.
+ * - Profit/loss is displayed as a line using the right scale.
+ * - Profit has its own zero baseline, so losses stay below zero.
+ * - Each point/bar has a native tooltip with its actual value.
  */
-function chartSvg(quarters, metric) {
-  const W = 760;
-  const H = 300;
-  const L = 12;
-  const R = 12;
-  const T = 38;
-  const B = 48;
+function combinedChartSvg(quarters) {
+  const W = 800;
+  const H = 350;
+  const L = 66;
+  const R = 66;
+  const T = 28;
+  const B = 54;
   const innerW = W - L - R;
   const innerH = H - T - B;
   const count = quarters.length;
 
   if (!count) {
-    return '<p class="jargon">Not enough reported data to draw this chart.</p>';
+    return '<p class="jargon">No valid quarterly data is available for the chart.</p>';
   }
 
-  const values = quarters.map(quarter => {
-    const value = quarter[metric];
-    return value == null || !Number.isFinite(Number(value))
+  const revenue = quarters.map(q =>
+    q.sales == null || !Number.isFinite(Number(q.sales))
       ? null
-      : Number(value);
+      : Number(q.sales)
+  );
+
+  const profit = quarters.map(q =>
+    q.profit == null || !Number.isFinite(Number(q.profit))
+      ? null
+      : Number(q.profit)
+  );
+
+  if (!revenue.some(v => v !== null) && !profit.some(v => v !== null)) {
+    return '<p class="jargon">There is not enough reported data to draw the chart.</p>';
+  }
+
+  const maxRevenue = Math.max(1, ...revenue.filter(v => v !== null), 0);
+  const revenueMax = maxRevenue * 1.16;
+
+  const validProfit = profit.filter(v => v !== null);
+  const profitMin = Math.min(0, ...validProfit);
+  const profitMax = Math.max(0, ...validProfit);
+  const profitRange = Math.max(1, profitMax - profitMin);
+  const profitPadding = profitRange * 0.12;
+
+  const profitDomainMin = profitMin < 0 ? profitMin - profitPadding : 0;
+  const profitDomainMax = profitMax > 0 ? profitMax + profitPadding : 1;
+
+  const revenueY = value =>
+    T + innerH - (value / revenueMax) * innerH;
+
+  const profitY = value =>
+    T + ((profitDomainMax - value) /
+      (profitDomainMax - profitDomainMin)) * innerH;
+
+  const slot = innerW / count;
+  const barWidth = Math.min(38, slot * 0.48);
+  const revenueZeroY = revenueY(0);
+  const profitZeroY = profitY(0);
+
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Combined quarterly revenue bars and net profit or loss line. Revenue uses the left axis; profit and loss use the right axis.">`;
+
+  // Horizontal gridlines are tied to the revenue scale.
+  for (let i = 0; i <= 4; i++) {
+    const value = revenueMax * i / 4;
+    const y = revenueY(value);
+
+    svg += `<line class="chart-gridline" x1="${L}" y1="${y.toFixed(2)}" x2="${W-R}" y2="${y.toFixed(2)}"/>`;
+    svg += `<text class="chart-label" x="${L-8}" y="${(y+4).toFixed(2)}" text-anchor="end">${esc(shortMoney(value))}</text>`;
+  }
+
+  // Label the two axes to make the different scales explicit.
+  svg += `<text class="chart-label" x="${L}" y="13" text-anchor="start">Revenue</text>`;
+  svg += `<text class="chart-label" x="${W-R}" y="13" text-anchor="end">Profit / loss</text>`;
+
+  // Revenue bars use the left axis.
+  quarters.forEach((quarter, index) => {
+    const value = revenue[index];
+    const center = L + slot * (index + 0.5);
+    const x = center - barWidth / 2;
+
+    if (value !== null) {
+      const y = revenueY(Math.max(0, value));
+      const height = Math.max(1, revenueZeroY - y);
+
+      svg += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${height.toFixed(2)}" rx="5" fill="var(--acc)"><title>${esc(quarterName(quarter.end))} revenue: ${esc(money(value))}</title></rect>`;
+    }
   });
 
-  const valid = values.filter(value => value !== null);
+  // Profit's zero line is positioned using the right-axis scale.
+  svg += `<line class="chart-zero" x1="${L}" y1="${profitZeroY.toFixed(2)}" x2="${W-R}" y2="${profitZeroY.toFixed(2)}"/>`;
+  svg += `<text class="chart-label" x="${W-R+8}" y="${(profitZeroY+4).toFixed(2)}" text-anchor="start">$0</text>`;
 
-  if (!valid.length) {
-    return '<p class="jargon">Not enough reported data to draw this chart.</p>';
+  // Right-axis labels for profit/loss.
+  for (let i = 0; i <= 4; i++) {
+    const value = profitDomainMax -
+      (profitDomainMax - profitDomainMin) * i / 4;
+    const y = profitY(value);
+
+    svg += `<text class="chart-label" x="${W-R+8}" y="${(y+4).toFixed(2)}" text-anchor="start">${esc(shortMoney(value))}</text>`;
   }
 
-  const isProfit = metric === 'profit';
-  const slot = innerW / count;
-  const barWidth = Math.min(48, slot * 0.56);
+  // Draw the profit line as separate segments so missing quarters do not
+  // create false connections across unavailable data.
+  let segment = [];
 
-  let minValue = Math.min(0, ...valid);
-  let maxValue = Math.max(0, ...valid);
+  const drawSegment = points => {
+    if (!points.length) return '';
 
-  // Revenue starts at zero. Profit/loss gets room on both sides of zero.
-  if (!isProfit) {
-    maxValue = maxValue || 1;
-  }
+    let output = '';
 
-  const rawRange = maxValue - minValue || 1;
-  const padding = rawRange * 0.14;
-
-  const domainMin = minValue < 0 ? minValue - padding : 0;
-  const domainMax = maxValue > 0 ? maxValue + padding : 1;
-  const range = domainMax - domainMin || 1;
-
-  const yFor = value => T + ((domainMax - value) / range) * innerH;
-  const baseline = yFor(0);
-
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${isProfit ? 'Quarterly profit and loss' : 'Quarterly revenue'} for the latest ${count} quarters">`;
-
-  // Subtle guide lines make the scale easier to follow.
-  if (isProfit && domainMin < 0 && domainMax > 0) {
-    const negativeGuide = yFor(domainMin / 2);
-    const positiveGuide = yFor(domainMax / 2);
-
-    svg += `<line x1="${L}" y1="${positiveGuide.toFixed(1)}" x2="${W-R}" y2="${positiveGuide.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
-    svg += `<line x1="${L}" y1="${negativeGuide.toFixed(1)}" x2="${W-R}" y2="${negativeGuide.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
-  }
-
-  svg += `<line class="${isProfit ? 'chart-zero' : ''}" x1="${L}" y1="${baseline.toFixed(1)}" x2="${W-R}" y2="${baseline.toFixed(1)}" stroke="var(--line)" stroke-width="1.5"/>`;
-
-  quarters.forEach((quarter, index) => {
-    const value = values[index];
-    const centerX = L + index * slot + slot / 2;
-    const x = centerX - barWidth / 2;
-
-    if (value === null) {
-      svg += `<line x1="${x.toFixed(1)}" y1="${(baseline-2).toFixed(1)}" x2="${(x+barWidth).toFixed(1)}" y2="${(baseline-2).toFixed(1)}" stroke="var(--line)" stroke-width="3" stroke-linecap="round"/>`;
-    } else {
-      const valueY = yFor(value);
-      const top = Math.min(valueY, baseline);
-      const height = Math.max(2, Math.abs(baseline - valueY));
-      const fill = isProfit
-        ? value < 0 ? 'var(--bad)' : 'var(--good)'
-        : 'var(--acc)';
-
-      svg += `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${height.toFixed(1)}" rx="7" fill="${fill}"/>`;
-
-      // Place labels outside the bar when possible, without clipping.
-      const label = shortMoney(value);
-      let labelY;
-
-      if (isProfit && value < 0) {
-        labelY = Math.min(H - B - 3, valueY + 17);
-        if (height < 25) labelY = Math.min(H - B - 3, valueY + height + 13);
-      } else {
-        labelY = Math.max(15, top - 8);
-        if (height < 25) labelY = Math.max(15, top - 8);
-      }
-
-      svg += `<text class="chart-value" x="${centerX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle">${esc(label)}</text>`;
+    if (points.length > 1) {
+      output += `<polyline points="${points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}" fill="none" stroke="var(--good)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
     }
 
-    // Use compact quarter labels for better spacing.
-    const label = quarter.end
+    for (const point of points) {
+      const fill = point.value < 0 ? 'var(--bad)' : 'var(--good)';
+
+      output += `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5" fill="${fill}" stroke="var(--card)" stroke-width="2"><title>${esc(point.label)} net profit/loss: ${esc(money(point.value))}</title></circle>`;
+    }
+
+    return output;
+  };
+
+  quarters.forEach((quarter, index) => {
+    const value = profit[index];
+
+    if (value === null) {
+      svg += drawSegment(segment);
+      segment = [];
+      return;
+    }
+
+    const point = {
+      x: L + slot * (index + 0.5),
+      y: profitY(value),
+      value,
+      label: quarterName(quarter.end)
+    };
+
+    segment.push(point);
+  });
+
+  svg += drawSegment(segment);
+
+  // Quarter labels follow the same oldest-to-newest order as the table.
+  quarters.forEach((quarter, index) => {
+    const center = L + slot * (index + 0.5);
+    const label = validDate(quarter.end)
       ? new Date(quarter.end + 'T00:00:00Z').toLocaleString('en-US', {
           month: 'short',
           timeZone: 'UTC'
-        }) + ' ' + new Date(quarter.end + 'T00:00:00Z').getUTCFullYear().toString().slice(-2)
+        }) + ' ' + quarter.end.slice(2, 4)
       : '–';
 
-    svg += `<text class="chart-label" x="${centerX.toFixed(1)}" y="${H-17}" text-anchor="middle">${esc(label)}</text>`;
+    svg += `<text class="chart-label" x="${center.toFixed(2)}" y="${H-22}" text-anchor="middle">${esc(label)}</text>`;
   });
 
   svg += '</svg>';
@@ -399,35 +463,63 @@ function chartSvg(quarters, metric) {
 }
 
 function renderBalance(balance) {
-  if (!balance) return '';
+  // Always display the section. A missing field should not hide the sheet.
+  const sheet = balance && typeof balance === 'object' ? balance : {};
 
-  const rows = items => (items || []).map(item =>
-    `<div class="bs-item">
-      <span>${esc(item.label)}</span>
-      <span>${item.value == null ? 'Not reported' : money(item.value)}</span>
-    </div>`
-  ).join('');
+  const rows = items => {
+    if (!Array.isArray(items) || !items.length) {
+      return '<p class="jargon">Breakdown not available in the reported SEC data.</p>';
+    }
+
+    return items.map(item =>
+      `<div class="bs-item">
+        <span>${esc(item.label || 'Item')}</span>
+        <span>${item.value == null || !Number.isFinite(Number(item.value))
+          ? 'Not available'
+          : money(item.value)}</span>
+      </div>`
+    ).join('');
+  };
+
+  const total = value =>
+    value == null || !Number.isFinite(Number(value))
+      ? 'Not available'
+      : money(value);
 
   return `
-    <h3 class="sec">Balance sheet${balance.date ? ' · ' + esc(balance.date) : ''}</h3>
+    <h3 class="sec">Balance sheet${sheet.date ? ' · ' + esc(sheet.date) : ''}</h3>
     <div class="totals">
-      <div class="total"><span>Total assets</span><strong>${money(balance.totalAssets)}</strong></div>
-      <div class="total"><span>Total liabilities</span><strong>${money(balance.totalLiabilities)}</strong></div>
-      <div class="total"><span>Shareholders’ equity</span><strong>${money(balance.equity)}</strong></div>
-      <div class="total"><span>Cash and equivalents</span><strong>${money(balance.cashAndEquivalents)}</strong></div>
+      <div class="total"><span>Total assets</span><strong>${total(sheet.totalAssets)}</strong></div>
+      <div class="total"><span>Total liabilities</span><strong>${total(sheet.totalLiabilities)}</strong></div>
+      <div class="total"><span>Shareholders’ equity</span><strong>${total(sheet.equity)}</strong></div>
+      <div class="total"><span>Cash and equivalents</span><strong>${total(sheet.cashAndEquivalents)}</strong></div>
     </div>
+    ${!sheet.date ? '<p class="note">A reporting date could not be identified in the available SEC data.</p>' : ''}
     <div class="bs-grid">
-      <div class="bs-card"><h3>Assets breakdown</h3>${rows(balance.assets)}</div>
-      <div class="bs-card"><h3>Liabilities and equity</h3>${rows(balance.funding)}</div>
+      <div class="bs-card"><h3>Assets breakdown</h3>${rows(sheet.assets)}</div>
+      <div class="bs-card"><h3>Liabilities and equity</h3>${rows(sheet.funding)}</div>
     </div>
-    <p class="note">The listed categories may not include every line item on the company’s balance sheet. Total figures are shown separately.</p>`;
+    <p class="note">The listed categories may not include every line item on the company’s balance sheet. Figures are shown only when supported by reported data.</p>`;
 }
 
 function render(data) {
-  // Keep the latest eight quarters and display them oldest to newest.
-  const quarters = (Array.isArray(data.quarters) ? data.quarters : [])
-    .filter(quarter => quarter && quarter.end)
-    .sort((a, b) => String(a.end).localeCompare(String(b.end)))
+  // Validate dates, remove duplicate periods, and sort a copy oldest-first.
+  // This does not mutate the API data used for latest-quarter calculations.
+  const sourceQuarters = Array.isArray(data.quarters) ? data.quarters : [];
+  const byDate = new Map();
+
+  for (const quarter of sourceQuarters) {
+    if (!quarter || !validDate(quarter.end)) continue;
+
+    // Keep the first occurrence for a reporting date. The API sends its
+    // quarterly data newest-first, so this retains the newest entry.
+    if (!byDate.has(quarter.end)) {
+      byDate.set(quarter.end, quarter);
+    }
+  }
+
+  const quarters = [...byDate.values()]
+    .sort((a, b) => a.end.localeCompare(b.end))
     .slice(-8);
 
   const table = quarters.map(quarter =>
@@ -436,7 +528,9 @@ function render(data) {
       <td>${money(quarter.sales)}</td>
       <td class="${sign(quarter.salesYoY)}">${pct(quarter.salesYoY)}</td>
       <td class="${sign(quarter.profit)}">${money(quarter.profit)}</td>
-      <td>${quarter.margin == null ? '–' : (quarter.margin * 100).toFixed(1) + '%'}</td>
+      <td>${quarter.margin == null || !Number.isFinite(Number(quarter.margin))
+        ? '–'
+        : (quarter.margin * 100).toFixed(1) + '%'}</td>
       <td class="${sign(quarter.cash)}">${money(quarter.cash)}</td>
     </tr>`
   ).join('');
@@ -483,7 +577,7 @@ function render(data) {
       `<p class="jargon">${esc(event.date || '')}${link}</p>${explanation}`
     );
   }).join('') ||
-    '<p class="jargon">No notable SEC announcements were found in the past 90 days.</p>';
+    '<p class="jargon">No notable SEC announcements were found in the past year.</p>';
 
   const checks = (data.checks || []).map(check =>
     `<div class="check">
@@ -503,32 +597,33 @@ function render(data) {
     </div>`
   ).join('');
 
+  const description = typeof data.companyDescription === 'string'
+    ? data.companyDescription.trim()
+    : '';
+
   $('result').innerHTML = `
     <div class="head">
       <h2>${esc(data.name || data.ticker || 'Company')} (${esc(data.ticker || '')})</h2>
       <span class="tag">${esc(data.periodLabel || '')}</span>
     </div>
 
-    ${data.companyDescription
-      ? `<p class="about">${esc(data.companyDescription)}</p>`
+    ${description
+      ? `<p class="about">${esc(description)}</p>`
       : '<p class="note">A plain-English company description is not available right now. Financial figures below are from SEC filings.</p>'}
 
     <p class="summary">${esc(data.summary || 'Analysis completed, but a summary was not returned.')}</p>
 
     <h3 class="sec">Revenue and profit · latest ${quarters.length} quarters</h3>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <h3>Revenue</h3>
-        <p>Sales reported each quarter</p>
-        ${chartSvg(quarters, 'sales')}
-        <div class="legend"><span><i class="dot"></i>Revenue</span></div>
+    <div class="chart-card">
+      <h3>Quarterly revenue and profit / loss</h3>
+      <p>Revenue uses the left axis; profit and loss use the right axis. Hover over a bar or point for the reported value.</p>
+      ${combinedChartSvg(quarters)}
+      <div class="legend">
+        <span><i class="dot"></i>Revenue bars</span>
+        <span><i class="dot profit"></i>Profit line</span>
+        <span><i class="dot loss"></i>Loss points</span>
       </div>
-      <div class="chart-card">
-        <h3>Profit / loss</h3>
-        <p>Losses extend below the zero line</p>
-        ${chartSvg(quarters, 'profit')}
-        <div class="legend"><span><i class="dot profit"></i>Profit</span><span class="neg">Loss</span></div>
-      </div>
+      <p class="chart-tooltip">The dashed line marks zero for profit/loss. Negative values remain below that line.</p>
     </div>
 
     <h3 class="sec">Quarter-by-quarter figures</h3>
