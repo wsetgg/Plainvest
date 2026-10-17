@@ -17,6 +17,37 @@ const DAY = 864e5;
 const DAILY_ANALYSIS_LIMIT = 3;
 const GEMINI_MODEL = "gemini-3.8-flash";
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
+const GEMINI_TIMEOUT_MS = 5000;
+const EVENT_TIMEOUT_MS = 2500;
+
+async function fetchWithTimeout(
+  url,
+  options = {},
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
+) {
+  const signal = AbortSignal.timeout(timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal });
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+      let host = "upstream service";
+      try {
+        host = new URL(url).hostname;
+      } catch {}
+
+      const timeoutError = new Error(
+        `Request to ${host} timed out after ${Math.round(timeoutMs / 1000)} seconds.`
+      );
+      timeoutError.code = "UPSTREAM_TIMEOUT";
+      throw timeoutError;
+    }
+
+    throw error;
+  }
+}
+
 const RESERVE_DAILY_SCRIPT = `
 local current = tonumber(redis.call("GET", KEYS[1]) or "0")
 if current >= tonumber(ARGV[1]) then
@@ -50,7 +81,7 @@ async function redisCommand(command) {
   }
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -172,7 +203,7 @@ let tickerAt = 0;
 
 async function lookup(ticker) {
   if (!tickerMap || Date.now() - tickerAt > DAY) {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://www.sec.gov/files/company_tickers.json",
       { headers: H() }
     );
@@ -371,8 +402,6 @@ function quarters(facts, concepts) {
       )
       .sort((a, b) => b.end.localeCompare(a.end));
 
-    // Avoid duplicate reporting dates and prefer the newest supported
-    // concept when several revenue concepts are available.
     const unique = [];
     const seen = new Set();
 
@@ -628,8 +657,6 @@ function analyzeFacts(facts) {
     return operatingCash - (capex == null ? 0 : Math.abs(capex));
   };
 
-  // Keep these calculations newest-first. The frontend sorts a copy
-  // for display, so the latest-quarter calculations remain correct.
   const rows = revenueQuarters.slice(0, 8).map(quarter => {
     const income = qAt(incomeQuarters, quarter.end);
     const yearAgo = yAgo(revenueQuarters, quarter.end);
@@ -999,16 +1026,22 @@ function eventsFrom(submissions, cik) {
 }
 
 async function addEventDetails(events) {
-  return Promise.all((events || []).map(async event => {
+  const list = (events || []).slice(0, 3);
+  const remaining = (events || []).slice(3).map(event => ({
+    ...event,
+    details: null
+  }));
+
+  const detailed = await Promise.all(list.map(async event => {
     if (!event.url) return { ...event, details: null };
 
     try {
-      const response = await fetch(event.url, {
+      const response = await fetchWithTimeout(event.url, {
         headers: {
           "User-Agent": UA(),
           Accept: "text/html, text/plain, application/xhtml+xml"
         }
-      });
+      }, EVENT_TIMEOUT_MS);
 
       if (!response.ok) return { ...event, details: null };
 
@@ -1047,6 +1080,8 @@ async function addEventDetails(events) {
       return { ...event, details: null };
     }
   }));
+
+  return [...detailed, ...remaining];
 }
 
 const FOREIGN_MSG =
@@ -1072,7 +1107,7 @@ async function isFund(ticker) {
 
   try {
     if (!fundSet || Date.now() - fundAt > 7 * DAY) {
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         "https://www.sec.gov/files/company_tickers_mf.json",
         { headers: H() }
       );
@@ -1199,7 +1234,7 @@ ${signalData}
 RECENT COMPANY ANNOUNCEMENTS (filing text may be incomplete):
 ${JSON.stringify(eventInputs)}`;
 
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
       {
         method: "POST",
@@ -1214,7 +1249,8 @@ ${JSON.stringify(eventInputs)}`;
             temperature: 0.2
           }
         })
-      }
+      },
+      GEMINI_TIMEOUT_MS
     );
 
     if (!response.ok) {
@@ -1379,11 +1415,11 @@ async function handler(req, res) {
     const cik = String(company.cik_str).padStart(10, "0");
 
     const [factsResponse, submissionsResponse] = await Promise.all([
-      fetch(
+      fetchWithTimeout(
         `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
         { headers: H() }
       ),
-      fetch(
+      fetchWithTimeout(
         `https://data.sec.gov/submissions/CIK${cik}.json`,
         { headers: H() }
       ).catch(() => null)
@@ -1468,10 +1504,18 @@ async function handler(req, res) {
 
     res.setHeader("Cache-Control", "no-store");
 
-    res.status(error.status || 500).json({
+    const isTimeout = error?.code === "UPSTREAM_TIMEOUT";
+
+    if (!error.status) {
+      console.error("Plainvest analysis failed:", error?.message || error);
+    }
+
+    res.status(error.status || (isTimeout ? 504 : 500)).json({
       error: error.status
         ? error.message
-        : "Something went wrong. Try again."
+        : isTimeout
+          ? "A data service took too long to respond. Please try again."
+          : "Something went wrong. Try again."
     });
   }
 }
