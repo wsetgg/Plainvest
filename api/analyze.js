@@ -1,17 +1,4 @@
-/*
- * Plainvest API
- * GET /api/analyze?ticker=AAPL
- *
- * Required Vercel environment variables:
- * SEC_USER_AGENT
- * UPSTASH_REDIS_REST_URL
- * UPSTASH_REDIS_REST_TOKEN
- *
- * Optional:
- * GEMINI_API_KEY
- */
-
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -21,71 +8,79 @@ class HttpError extends Error {
 }
 
 const DAY = 86400000;
-const DAILY_LIMIT = 3;
-const UA = () => process.env.SEC_USER_AGENT;
+const LIMIT = 3;
+const ua = () => process.env.SEC_USER_AGENT;
 
-const headers = (accept = "application/json") => ({
-  "User-Agent": UA(),
+const secHeaders = (accept = 'application/json') => ({
+  'User-Agent': ua(),
   Accept: accept
 });
 
-const dateMs = value => new Date(value).getTime();
+const ms = value => new Date(value).getTime();
 
 const near = (a, b, days = 7) =>
+  Number.isFinite(a) &&
+  Number.isFinite(b) &&
   Math.abs(a - b) <= days * DAY;
 
-const usdRows = (facts, concept) =>
-  facts.facts?.["us-gaap"]?.[concept]?.units?.USD || [];
+const usdRows = (facts, tag) =>
+  facts.facts?.['us-gaap']?.[tag]?.units?.USD || [];
 
 const money = value => {
-  if (value == null || !Number.isFinite(Number(value))) return "not reported";
+  if (value == null || !Number.isFinite(Number(value))) {
+    return 'not reported';
+  }
 
-  const number = Number(value);
-  const abs = Math.abs(number);
-  const sign = number < 0 ? "-$" : "$";
+  const n = Number(value);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-$' : '$';
 
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)} billion`;
-  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1)} million`;
+  if (abs >= 1e9) {
+    return `${sign}${(abs / 1e9).toFixed(1)} billion`;
+  }
 
-  return `${sign}${Math.round(abs).toLocaleString("en-US")}`;
+  if (abs >= 1e6) {
+    return `${sign}${(abs / 1e6).toFixed(1)} million`;
+  }
+
+  return `${sign}${Math.round(abs).toLocaleString('en-US')}`;
 };
 
 const pct = value =>
   value == null || !Number.isFinite(Number(value))
-    ? "not available"
-    : `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%`;
+    ? 'not available'
+    : `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
 
 /* ---------------- DAILY LIMIT ---------------- */
 
-const RESERVE_SCRIPT = `
-local current = tonumber(redis.call("GET", KEYS[1]) or "0")
-if current >= tonumber(ARGV[1]) then
-  return {0, current, redis.call("TTL", KEYS[1])}
+const RESERVE_LUA = `
+local n = tonumber(redis.call('GET', KEYS[1]) or '0')
+if n >= tonumber(ARGV[1]) then
+  return {0, n, redis.call('TTL', KEYS[1])}
 end
-local count = redis.call("INCR", KEYS[1])
-if count == 1 then
-  redis.call("EXPIRE", KEYS[1], tonumber(ARGV[2]))
+local c = redis.call('INCR', KEYS[1])
+if c == 1 then
+  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
 end
-return {1, count, redis.call("TTL", KEYS[1])}
+return {1, c, redis.call('TTL', KEYS[1])}
 `;
 
-const RELEASE_SCRIPT = `
-local current = tonumber(redis.call("GET", KEYS[1]) or "0")
-if current <= 1 then
-  redis.call("DEL", KEYS[1])
-  return 0
+const RELEASE_LUA = `
+local n = tonumber(redis.call('GET', KEYS[1]) or '0')
+if n <= 1 then
+  return redis.call('DEL', KEYS[1])
 end
-return redis.call("DECR", KEYS[1])
+return redis.call('DECR', KEYS[1])
 `;
 
-async function redisCommand(command) {
+async function redis(command) {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!url || !token) {
     throw new HttpError(
       503,
-      "The daily analysis limit is not configured. Please try again later."
+      'The daily analysis limit is not configured. Please try again later.'
     );
   }
 
@@ -93,25 +88,26 @@ async function redisCommand(command) {
 
   try {
     response = await fetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(command),
-      cache: "no-store"
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000)
     });
   } catch {
     throw new HttpError(
       503,
-      "The daily limit service is temporarily unavailable. Please try again."
+      'The daily limit service is temporarily unavailable. Please try again.'
     );
   }
 
   if (!response.ok) {
     throw new HttpError(
       503,
-      "The daily limit service is temporarily unavailable. Please try again."
+      'The daily limit service is temporarily unavailable. Please try again.'
     );
   }
 
@@ -120,15 +116,16 @@ async function redisCommand(command) {
   if (data.error) {
     throw new HttpError(
       503,
-      "The daily limit service is temporarily unavailable. Please try again."
+      'The daily limit service is temporarily unavailable. Please try again.'
     );
   }
 
   return data.result;
 }
 
-function secondsUntilUtcMidnight() {
+function secondsToUtcMidnight() {
   const now = new Date();
+
   const midnight = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
@@ -138,26 +135,24 @@ function secondsUntilUtcMidnight() {
   return Math.max(1, Math.ceil((midnight - now.getTime()) / 1000));
 }
 
-async function reserveDailyAnalysis(req) {
-  const forwarded = String(
-    req.headers?.["x-forwarded-for"] || ""
-  ).split(",")[0].trim();
-
+async function reserve(req) {
   const ip = String(
-    req.headers?.["x-real-ip"] || forwarded || "unknown"
+    req.headers?.['x-real-ip'] ||
+    req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+    'unknown'
   );
 
-  const ipHash = createHash("sha256").update(ip).digest("hex");
-  const today = new Date().toISOString().slice(0, 10);
-  const key = `plainvest:daily:${today}:${ipHash}`;
+  const hash = createHash('sha256').update(ip).digest('hex');
+  const date = new Date().toISOString().slice(0, 10);
+  const key = `plainvest:daily:${date}:${hash}`;
 
-  const result = await redisCommand([
-    "EVAL",
-    RESERVE_SCRIPT,
-    "1",
+  const result = await redis([
+    'EVAL',
+    RESERVE_LUA,
+    '1',
     key,
-    String(DAILY_LIMIT),
-    String(secondsUntilUtcMidnight())
+    String(LIMIT),
+    String(secondsToUtcMidnight())
   ]);
 
   if (!Array.isArray(result) || Number(result[0]) !== 1) {
@@ -170,13 +165,13 @@ async function reserveDailyAnalysis(req) {
   return key;
 }
 
-async function releaseDailyAnalysis(key) {
+async function release(key) {
   if (!key) return;
 
   try {
-    await redisCommand(["EVAL", RELEASE_SCRIPT, "1", key]);
+    await redis(['EVAL', RELEASE_LUA, '1', key]);
   } catch (error) {
-    console.error("Could not release daily analysis reservation:", error);
+    console.error('Daily reservation release failed:', error?.message);
   }
 }
 
@@ -187,15 +182,28 @@ let tickerAt = 0;
 
 async function lookup(ticker) {
   if (!tickerMap || Date.now() - tickerAt > DAY) {
-    const response = await fetch(
-      "https://www.sec.gov/files/company_tickers.json",
-      { headers: headers(), cache: "no-store" }
-    );
+    let response;
+
+    try {
+      response = await fetch(
+        'https://www.sec.gov/files/company_tickers.json',
+        {
+          headers: secHeaders(),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(12000)
+        }
+      );
+    } catch {
+      throw new HttpError(
+        502,
+        'Could not reach the SEC ticker list. Try again shortly.'
+      );
+    }
 
     if (!response.ok) {
       throw new HttpError(
         502,
-        "Could not reach the SEC ticker list. Try again shortly."
+        'Could not reach the SEC ticker list. Try again shortly.'
       );
     }
 
@@ -213,22 +221,73 @@ async function lookup(ticker) {
   return tickerMap[ticker];
 }
 
-/* ---------------- QUARTERLY FINANCIAL DATA ---------------- */
+const ETF_NAMES = new Set((
+  'SPY QQQ VOO VTI IVV DIA IWM VT VEA VWO VXUS BND AGG GLD IAU SLV ' +
+  'XLK XLF XLE XLV XLY XLP XLI XLU XLB XLRE XLC ARKK ARKG ARKW ' +
+  'SCHD SCHB SCHX SCHG VUG VTV VIG VYM VGT VHT VNQ IJH IJR MDY ' +
+  'EFA IEFA IEMG EEM TLT IEF SHY HYG LQD JNK USO UNG SMH SOXX SOXL ' +
+  'TQQQ SQQQ UPRO SPXL SPXS TNA TZA IVW IVE IWF IWD IWB IWV QQQM ' +
+  'SPLG SPYG SPYV RSP QUAL USMV DGRO DVY SDY JEPI JEPQ BITO IBIT ' +
+  'FBTC GBTC ETHE XBI IBB KRE KBE XOP OIH GDX GDXJ ITB XHB VXX UVXY'
+).split(/\s+/));
 
-// Select one concept at a time to avoid adding overlapping SEC tags
-// together. The first usable concept in the supplied list is preferred.
+const FOREIGN_RE =
+  /^[A-Z0-9]{1,6}[.:](?:TO|V|NE|CN|L|T|HK|AX|NZ|SI|SW|PA|DE|F|MI|MC|AS|ST|OL|HE|CO|SS|SZ|KS|KQ|NS|BO|SA|MX|TW|JK|BK|KL|TA|IR)$/i;
+
+const ETF_MSG =
+  "That looks like an ETF or fund. ETFs don't have sales or profits the way companies do, so Plainvest can't analyze them yet.";
+
+const FOREIGN_MSG =
+  'That looks like a stock listed on a non-US exchange. Plainvest currently supports US-listed companies only. If the company also trades in the US, try its US ticker.';
+
+let fundSet = null;
+let fundAt = 0;
+
+async function isFund(ticker) {
+  if (ETF_NAMES.has(ticker)) return true;
+
+  try {
+    if (!fundSet || Date.now() - fundAt > 7 * DAY) {
+      const response = await fetch(
+        'https://www.sec.gov/files/company_tickers_mf.json',
+        {
+          headers: secHeaders(),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(10000)
+        }
+      );
+
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      const index = data.fields?.indexOf('symbol');
+
+      fundSet = new Set(
+        index >= 0
+          ? (data.data || []).map(row =>
+              String(row[index]).toUpperCase()
+            )
+          : []
+      );
+
+      fundAt = Date.now();
+    }
+
+    return fundSet.has(ticker);
+  } catch {
+    return false;
+  }
+}
+
+/* ---------------- QUARTERLY FINANCIAL DATA ---------------- */
 
 function latestByEnd(rows, instant = false) {
   const selected = new Map();
 
   for (const row of rows) {
-    if (!["10-Q", "10-K"].includes(row.form)) continue;
+    if (!['10-Q', '10-K'].includes(row.form)) continue;
 
-    if (instant) {
-      if (row.start) continue;
-    } else {
-      if (!row.start) continue;
-    }
+    if (instant ? row.start : !row.start) continue;
 
     const previous = selected.get(row.end);
 
@@ -243,7 +302,7 @@ function latestByEnd(rows, instant = false) {
 }
 
 function durationDays(row) {
-  return (dateMs(row.end) - dateMs(row.start)) / DAY;
+  return (ms(row.end) - ms(row.start)) / DAY;
 }
 
 function quarterSeries(facts, concepts) {
@@ -252,102 +311,91 @@ function quarterSeries(facts, concepts) {
 
     if (!rows.length) continue;
 
-    const directQuarters = rows.filter(row => {
+    const direct = rows.filter(row => {
       const days = durationDays(row);
       return days >= 70 && days <= 110;
     });
 
-    const ytdRows = rows.filter(row => {
+    const ytd = rows.filter(row => {
       const days = durationDays(row);
       return days >= 120 && days <= 310;
     });
 
-    const annualRows = rows.filter(row => {
+    const annual = rows.filter(row => {
       const days = durationDays(row);
-      return row.form === "10-K" && days >= 340 && days <= 390;
+      return row.form === '10-K' && days >= 340 && days <= 390;
     });
 
     const output = new Map();
 
-    // Prefer directly reported three-month figures when available.
-    for (const row of directQuarters) {
+    for (const row of direct) {
       output.set(row.end, {
         end: row.end,
         value: row.val
       });
     }
 
-    // Convert six-month and nine-month year-to-date values into
-    // individual quarters by subtracting the previous YTD value.
-    for (const row of ytdRows) {
+    // Derive standalone quarters from year-to-date totals.
+    for (const row of ytd) {
       const days = durationDays(row);
-      if (days < 120 || days > 310) continue;
 
-      const previousYtd = ytdRows
+      const previous = ytd
         .filter(other =>
           other.start === row.start &&
-          dateMs(other.end) < dateMs(row.end) &&
+          ms(other.end) < ms(row.end) &&
           durationDays(other) >= 120 &&
           durationDays(other) <= days - 60
         )
-        .sort((a, b) => dateMs(b.end) - dateMs(a.end))[0];
+        .sort((a, b) => ms(b.end) - ms(a.end))[0];
 
-      // The first YTD report is generally the first quarter.
-      if (days >= 70 && days <= 110) {
-        output.set(row.end, { end: row.end, value: row.val });
-      } else if (previousYtd) {
-        const previousDays = durationDays(previousYtd);
-        const quarterDays = days - previousDays;
+      if (previous) {
+        const quarterDays = days - durationDays(previous);
 
-        if (quarterDays >= 60 && quarterDays <= 110) {
-          // Do not replace a direct quarterly value with a YTD estimate.
-          if (!output.has(row.end)) {
-            output.set(row.end, {
-              end: row.end,
-              value: row.val - previousYtd.val
-            });
-          }
+        if (
+          quarterDays >= 60 &&
+          quarterDays <= 110 &&
+          !output.has(row.end)
+        ) {
+          output.set(row.end, {
+            end: row.end,
+            value: row.val - previous.val
+          });
         }
-      } else if (days >= 70 && days <= 110) {
-        output.set(row.end, { end: row.end, value: row.val });
       }
     }
 
-    // Q4 = annual figure minus the first nine months of the same year.
-    for (const annual of annualRows) {
-      if (output.has(annual.end)) continue;
+    // Derive Q4 from the annual total minus the first nine months.
+    for (const row of annual) {
+      if (output.has(row.end)) continue;
 
-      const nineMonth = ytdRows
-        .filter(row =>
-          row.start === annual.start &&
-          dateMs(row.end) < dateMs(annual.end) &&
-          durationDays(row) >= 240 &&
-          durationDays(row) <= 310
+      const nineMonth = ytd
+        .filter(other =>
+          other.start === row.start &&
+          ms(other.end) < ms(row.end) &&
+          durationDays(other) >= 240 &&
+          durationDays(other) <= 310
         )
-        .sort((a, b) => dateMs(b.end) - dateMs(a.end))[0];
+        .sort((a, b) => ms(b.end) - ms(a.end))[0];
 
       if (nineMonth) {
-        output.set(annual.end, {
-          end: annual.end,
-          value: annual.val - nineMonth.val
+        output.set(row.end, {
+          end: row.end,
+          value: row.val - nineMonth.val
         });
       } else {
-        // Some issuers report annual totals but not all YTD periods.
-        const sameYearQuarters = [...output.values()].filter(row =>
-          row.end > annual.start && row.end < annual.end
-        );
+        const previousQuarters = [...output.values()]
+          .filter(item =>
+            item.end > row.start &&
+            item.end < row.end
+          )
+          .sort((a, b) => a.end.localeCompare(b.end));
 
-        if (sameYearQuarters.length >= 3) {
-          const lastThree = sameYearQuarters
-            .sort((a, b) => a.end.localeCompare(b.end))
-            .slice(-3);
-
-          output.set(annual.end, {
-            end: annual.end,
-            value: annual.val - lastThree.reduce(
-              (sum, row) => sum + row.value,
-              0
-            )
+        if (previousQuarters.length >= 3) {
+          output.set(row.end, {
+            end: row.end,
+            value: row.val - previousQuarters
+              .slice(-3)
+              .reduce((sum, item) => sum + item.value, 0)
           });
         }
       }
@@ -364,14 +412,17 @@ function quarterSeries(facts, concepts) {
 }
 
 function findQuarterValue(series, end) {
-  const row = series.find(item => near(dateMs(item.end), dateMs(end), 7));
-  return row?.value ?? null;
+  return series.find(item =>
+    near(ms(item.end), ms(end), 7)
+  )?.value ?? null;
 }
 
 function yearAgoValue(series, end) {
-  const target = dateMs(end) - 365 * DAY;
-  const row = series.find(item => near(dateMs(item.end), target, 18));
-  return row?.value ?? null;
+  const target = ms(end) - 365 * DAY;
+
+  return series.find(item =>
+    near(ms(item.end), target, 18)
+  )?.value ?? null;
 }
 
 /* ---------------- BALANCE SHEET ---------------- */
@@ -380,11 +431,15 @@ function instantSeries(facts, concepts) {
   for (const concept of concepts) {
     const rows = latestByEnd(usdRows(facts, concept), true);
 
-    if (!rows.length) continue;
-
-    return rows
-      .map(row => ({ end: row.end, value: row.val, filed: row.filed }))
-      .sort((a, b) => b.end.localeCompare(a.end));
+    if (rows.length) {
+      return rows
+        .map(row => ({
+          end: row.end,
+          value: row.val,
+          filed: row.filed
+        }))
+        .sort((a, b) => b.end.localeCompare(a.end));
+    }
   }
 
   return [];
@@ -399,36 +454,42 @@ function latestInstant(facts, concepts, date) {
   return row?.value ?? null;
 }
 
-function balanceSheet(facts) {
-  const totalAssetsSeries = instantSeries(facts, ["Assets"]);
-  const totalLiabilitiesSeries = instantSeries(facts, ["Liabilities"]);
-  const equitySeries = instantSeries(facts, [
-    "StockholdersEquity",
-    "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
-  ]);
-  const combinedSeries = instantSeries(facts, [
-    "LiabilitiesAndStockholdersEquity"
-  ]);
+function latestInstantBefore(facts, concepts, targetDate) {
+  for (const concept of concepts) {
+    const rows = latestByEnd(usdRows(facts, concept), true)
+      .filter(row => ms(row.end) <= ms(targetDate))
+      .sort((a, b) => b.end.localeCompare(a.end));
 
-  const dates = [
-    ...totalAssetsSeries.map(row => row.end),
-    ...totalLiabilitiesSeries.map(row => row.end),
-    ...equitySeries.map(row => row.end),
-    ...combinedSeries.map(row => row.end)
-  ].sort((a, b) => b.localeCompare(a));
+    if (rows.length) return rows[0].val;
+  }
+
+  return null;
+}
+
+function balanceSheet(facts) {
+  const concepts = [
+    'Assets',
+    'Liabilities',
+    'StockholdersEquity',
+    'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest',
+    'LiabilitiesAndStockholdersEquity'
+  ];
+
+  const dates = concepts.flatMap(concept =>
+    instantSeries(facts, [concept]).map(row => row.end)
+  ).sort((a, b) => b.localeCompare(a));
 
   const date = dates[0] || null;
+  const at = tags => latestInstant(facts, tags, date);
 
-  const valueAt = (concepts) => latestInstant(facts, concepts, date);
-
-  const totalAssets = valueAt(["Assets"]);
-  let totalLiabilities = valueAt(["Liabilities"]);
-  let equity = valueAt([
-    "StockholdersEquity",
-    "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+  const totalAssets = at(['Assets']);
+  let totalLiabilities = at(['Liabilities']);
+  let equity = at([
+    'StockholdersEquity',
+    'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest'
   ]);
 
-  const combined = valueAt(["LiabilitiesAndStockholdersEquity"]);
+  const combined = at(['LiabilitiesAndStockholdersEquity']);
 
   if (totalLiabilities == null && combined != null && equity != null) {
     totalLiabilities = combined - equity;
@@ -438,93 +499,76 @@ function balanceSheet(facts) {
     equity = combined - totalLiabilities;
   }
 
-  const cashAndEquivalents = valueAt([
-    "CashAndCashEquivalentsAtCarryingValue"
-  ]);
-
-  const assetConcepts = [
-    ["Cash and cash equivalents", ["CashAndCashEquivalentsAtCarryingValue"]],
-    ["Short-term investments", ["ShortTermInvestments"]],
-    ["Accounts receivable", ["AccountsReceivableNetCurrent", "AccountsReceivableNet"]],
-    ["Inventory", ["InventoryNet"]],
-    ["Other current assets", ["OtherAssetsCurrent"]],
-    ["Property and equipment", ["PropertyPlantAndEquipmentNet"]],
-    ["Goodwill", ["Goodwill"]],
-    ["Intangible assets", ["FiniteLivedIntangibleAssetsNet", "IntangibleAssetsNetExcludingGoodwill"]],
-    ["Other non-current assets", ["OtherAssetsNoncurrent", "OtherAssets"]]
+  const assetDefinitions = [
+    ['Cash and cash equivalents', ['CashAndCashEquivalentsAtCarryingValue']],
+    ['Short-term investments', ['ShortTermInvestments']],
+    ['Accounts receivable', ['AccountsReceivableNetCurrent', 'AccountsReceivableNet']],
+    ['Inventory', ['InventoryNet']],
+    ['Other current assets', ['OtherAssetsCurrent']],
+    ['Property and equipment', ['PropertyPlantAndEquipmentNet']],
+    ['Goodwill', ['Goodwill']],
+    ['Intangible assets', ['FiniteLivedIntangibleAssetsNet', 'IntangibleAssetsNetExcludingGoodwill']],
+    ['Other non-current assets', ['OtherAssetsNoncurrent', 'OtherAssets']]
   ];
 
-  const liabilityConcepts = [
-    ["Accounts payable", ["AccountsPayableCurrent"]],
-    ["Current debt", ["ShortTermBorrowings", "ShortTermDebtCurrent", "LongTermDebtCurrent"]],
-    ["Other current liabilities", ["OtherLiabilitiesCurrent"]],
-    ["Long-term debt", ["LongTermDebtNoncurrent", "LongTermDebt"]],
-    ["Other non-current liabilities", ["OtherLiabilitiesNoncurrent"]],
-    ["Shareholders' equity", [
-      "StockholdersEquity",
-      "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
-    ]]
+  const fundingDefinitions = [
+    ['Accounts payable', ['AccountsPayableCurrent']],
+    ['Current debt', ['ShortTermBorrowings', 'ShortTermDebtCurrent', 'LongTermDebtCurrent']],
+    ['Other current liabilities', ['OtherLiabilitiesCurrent']],
+    ['Long-term debt', ['LongTermDebtNoncurrent', 'LongTermDebt']],
+    ['Other non-current liabilities', ['OtherLiabilitiesNoncurrent']],
+    ['Shareholders’ equity', ['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest']]
   ];
 
-  const makeItems = concepts => concepts.map(([label, tags]) => ({
+  const makeItems = definitions => definitions.map(([label, tags]) => ({
     label,
-    value: valueAt(tags)
+    value: at(tags)
   }));
 
-  const assets = makeItems(assetConcepts);
-  const funding = makeItems(liabilityConcepts);
-
-  // These categories are not exhaustive for every company. Total assets,
-  // liabilities and equity are shown separately to avoid implying that
-  // the selected subcategories add up to the totals.
   return {
     date,
     totalAssets,
     totalLiabilities,
     equity,
-    cashAndEquivalents,
-    assets,
-    funding
+    cashAndEquivalents: at(['CashAndCashEquivalentsAtCarryingValue']),
+    assets: makeItems(assetDefinitions),
+    funding: makeItems(fundingDefinitions)
   };
 }
 
 /* ---------------- FINANCIAL ANALYSIS ---------------- */
 
 function analyzeFacts(facts) {
-  if (!facts.facts?.["us-gaap"]) return null;
+  if (!facts.facts?.['us-gaap']) return null;
 
   const revenue = quarterSeries(facts, [
-    "Revenues",
-    "RevenueFromContractWithCustomerExcludingAssessedTax",
-    "RevenueFromContractWithCustomerIncludingAssessedTax",
-    "SalesRevenueNet"
+    'Revenues',
+    'RevenueFromContractWithCustomerExcludingAssessedTax',
+    'RevenueFromContractWithCustomerIncludingAssessedTax',
+    'SalesRevenueNet'
   ]);
 
   if (revenue.length < 2) return null;
 
   const profitSeries = quarterSeries(facts, [
-    "NetIncomeLoss",
-    "ProfitLoss"
+    'NetIncomeLoss',
+    'ProfitLoss'
   ]);
 
   const operatingCashSeries = quarterSeries(facts, [
-    "NetCashProvidedByUsedInOperatingActivities"
+    'NetCashProvidedByUsedInOperatingActivities'
   ]);
 
   const capexSeries = quarterSeries(facts, [
-    "PaymentsToAcquirePropertyPlantAndEquipment",
-    "PaymentsToAcquireProductiveAssets"
+    'PaymentsToAcquirePropertyPlantAndEquipment',
+    'PaymentsToAcquireProductiveAssets'
   ]);
 
   const cashAt = end => {
     const operating = findQuarterValue(operatingCashSeries, end);
     const capex = findQuarterValue(capexSeries, end);
 
-    if (operating == null) return null;
-
-    // If capex isn't reported, don't pretend that free cash flow equals
-    // operating cash flow. Mark it unavailable instead.
-    if (capex == null) return null;
+    if (operating == null || capex == null) return null;
 
     return operating - Math.abs(capex);
   };
@@ -549,11 +593,11 @@ function analyzeFacts(facts) {
 
   const current = quarters[0];
   const previous = quarters[1];
-
   const priorProfit = yearAgoValue(profitSeries, current.end);
   const priorRevenue = yearAgoValue(revenue, current.end);
+
   const priorCashEnd = revenue.find(row =>
-    near(dateMs(row.end), dateMs(current.end) - 365 * DAY, 18)
+    near(ms(row.end), ms(current.end) - 365 * DAY, 18)
   )?.end;
 
   const priorCash = priorCashEnd ? cashAt(priorCashEnd) : null;
@@ -564,29 +608,32 @@ function analyzeFacts(facts) {
 
   const balance = balanceSheet(facts);
 
-  const debtRatio = balance.totalLiabilities != null &&
+  const debtRatio =
+    balance.totalLiabilities != null &&
     balance.equity != null &&
     balance.equity > 0
       ? balance.totalLiabilities / balance.equity
       : null;
 
   const signals = [];
-  const addSignal = (kind, title, text) =>
+
+  const addSignal = (kind, title, text) => {
     signals.push({ kind, title, text });
+  };
 
   if (current.salesYoY != null && previous?.salesYoY != null) {
     const difference = current.salesYoY - previous.salesYoY;
 
     if (difference >= 0.05) {
       addSignal(
-        "positive",
-        "Sales growth is speeding up",
+        'positive',
+        'Sales growth is speeding up',
         `Year-over-year sales growth rose from ${pct(previous.salesYoY)} to ${pct(current.salesYoY)}.`
       );
     } else if (difference <= -0.05) {
       addSignal(
-        "negative",
-        "Sales growth is slowing",
+        'negative',
+        'Sales growth is slowing',
         `Year-over-year sales growth fell from ${pct(previous.salesYoY)} to ${pct(current.salesYoY)}.`
       );
     }
@@ -594,16 +641,16 @@ function analyzeFacts(facts) {
 
   if (current.salesYoY != null && current.salesYoY <= -0.05) {
     addSignal(
-      "negative",
-      "Sales are shrinking",
+      'negative',
+      'Sales are shrinking',
       `Sales were down ${pct(current.salesYoY)} from the same quarter a year earlier.`
     );
   }
 
   if (current.salesYoY != null && current.salesYoY >= 0.2) {
     addSignal(
-      "positive",
-      "Fast sales growth",
+      'positive',
+      'Fast sales growth',
       `Sales were up ${pct(current.salesYoY)} from the same quarter a year earlier.`
     );
   }
@@ -611,30 +658,30 @@ function analyzeFacts(facts) {
   if (priorProfit != null && current.profit != null) {
     if (priorProfit < 0 && current.profit >= 0) {
       addSignal(
-        "positive",
-        "Swung to a profit",
-        "The company lost money in the same quarter a year ago but made a profit in the latest quarter."
+        'positive',
+        'Swung to a profit',
+        'The company lost money in the comparable quarter last year but made a profit now.'
       );
     } else if (priorProfit >= 0 && current.profit < 0) {
       addSignal(
-        "negative",
-        "Swung to a loss",
-        "The company made a profit in the same quarter a year ago but reported a loss in the latest quarter."
+        'negative',
+        'Swung to a loss',
+        'The company made a profit in the comparable quarter last year but reported a loss now.'
       );
     } else if (current.margin != null && priorMargin != null) {
       const difference = current.margin - priorMargin;
 
       if (difference >= 0.03) {
         addSignal(
-          "positive",
-          "Profit margin improved",
-          `It kept about ${(current.margin * 100).toFixed(1)}% of sales as profit, compared with ${(priorMargin * 100).toFixed(1)}% a year earlier.`
+          'positive',
+          'Profit margin improved',
+          `It kept ${(current.margin * 100).toFixed(1)}% of sales as profit, compared with ${(priorMargin * 100).toFixed(1)}% a year earlier.`
         );
       } else if (difference <= -0.03) {
         addSignal(
-          "negative",
-          "Profit margin declined",
-          `It kept about ${(current.margin * 100).toFixed(1)}% of sales as profit, compared with ${(priorMargin * 100).toFixed(1)}% a year earlier.`
+          'negative',
+          'Profit margin declined',
+          `It kept ${(current.margin * 100).toFixed(1)}% of sales as profit, compared with ${(priorMargin * 100).toFixed(1)}% a year earlier.`
         );
       }
     }
@@ -643,62 +690,66 @@ function analyzeFacts(facts) {
   if (current.cash != null && priorCash != null) {
     if (current.cash > 0 && priorCash <= 0) {
       addSignal(
-        "positive",
-        "Free cash flow turned positive",
-        "Free cash flow was negative in the comparable quarter last year but is positive now."
+        'positive',
+        'Free cash flow turned positive',
+        'Free cash flow was negative in the comparable quarter last year but is positive now.'
       );
     } else if (current.cash < 0 && priorCash >= 0) {
       addSignal(
-        "negative",
-        "Free cash flow turned negative",
-        "Free cash flow was positive in the comparable quarter last year but is negative now."
+        'negative',
+        'Free cash flow turned negative',
+        'Free cash flow was positive in the comparable quarter last year but is negative now.'
       );
     } else if (Math.abs(priorCash) > 0) {
       const change = (current.cash - priorCash) / Math.abs(priorCash);
 
       if (change >= 0.25) {
         addSignal(
-          "positive",
-          "Free cash flow improved",
+          'positive',
+          'Free cash flow improved',
           `Free cash flow changed from ${money(priorCash)} to ${money(current.cash)} year over year.`
         );
       } else if (change <= -0.25) {
         addSignal(
-          "negative",
-          "Free cash flow weakened",
+          'negative',
+          'Free cash flow weakened',
           `Free cash flow changed from ${money(priorCash)} to ${money(current.cash)} year over year.`
         );
       }
     }
   }
 
-  if (debtRatio != null) {
-    const olderDate = balance.date
-      ? new Date(dateMs(balance.date) - 365 * DAY).toISOString().slice(0, 10)
-      : null;
+  if (debtRatio != null && balance.date) {
+    const olderDate = new Date(
+      ms(balance.date) - 365 * DAY
+    ).toISOString().slice(0, 10);
 
-    const olderLiabilities = olderDate
-      ? latestInstantForDate(facts, ["Liabilities"], olderDate)
-      : null;
+    const olderLiabilities = latestInstantBefore(
+      facts,
+      ['Liabilities'],
+      olderDate
+    );
 
-    const olderEquity = olderDate
-      ? latestInstantForDate(facts, ["StockholdersEquity"], olderDate)
-      : null;
+    const olderEquity = latestInstantBefore(
+      facts,
+      ['StockholdersEquity'],
+      olderDate
+    );
 
     if (olderLiabilities != null && olderEquity > 0) {
       const oldRatio = olderLiabilities / olderEquity;
 
       if (debtRatio - oldRatio >= 0.5) {
         addSignal(
-          "negative",
-          "Debt load is rising",
-          `The company owes about $${debtRatio.toFixed(1)} per $1 of shareholders' equity, compared with $${oldRatio.toFixed(1)} a year earlier.`
+          'negative',
+          'Debt load is rising',
+          `The company owes about $${debtRatio.toFixed(1)} per $1 of shareholders’ equity, compared with $${oldRatio.toFixed(1)} a year earlier.`
         );
       } else if (oldRatio - debtRatio >= 0.5) {
         addSignal(
-          "positive",
-          "Debt load is falling",
-          `The company owes about $${debtRatio.toFixed(1)} per $1 of shareholders' equity, compared with $${oldRatio.toFixed(1)} a year earlier.`
+          'positive',
+          'Debt load is falling',
+          `The company owes about $${debtRatio.toFixed(1)} per $1 of shareholders’ equity, compared with $${oldRatio.toFixed(1)} a year earlier.`
         );
       }
     }
@@ -707,21 +758,21 @@ function analyzeFacts(facts) {
   const unavailable = (title, jargon) => ({
     title,
     jargon,
-    status: "na",
-    text: "The available SEC filings do not provide enough consistent data to assess this."
+    status: 'na',
+    text: 'The available SEC filings do not provide enough consistent data to assess this.'
   });
 
   const checks = [];
 
   if (current.margin == null) {
-    checks.push(unavailable("Profit", "Net profit margin"));
+    checks.push(unavailable('Profit', 'Net profit margin'));
   } else {
     checks.push({
-      title: "Profit",
-      jargon: "Net profit margin",
+      title: 'Profit',
+      jargon: 'Net profit margin',
       status: current.margin >= 0.1
-        ? "good"
-        : current.margin >= 0.03 ? "warn" : "bad",
+        ? 'good'
+        : current.margin >= 0.03 ? 'warn' : 'bad',
       text: current.margin >= 0
         ? `Of every $100 it sold in the latest quarter, it kept about $${(current.margin * 100).toFixed(0)} as profit after all costs.`
         : `It lost about $${(-current.margin * 100).toFixed(0)} for every $100 it sold.`
@@ -729,88 +780,86 @@ function analyzeFacts(facts) {
   }
 
   if (balance.totalLiabilities == null || balance.equity == null) {
-    checks.push(unavailable("Debt", "Total liabilities to equity"));
+    checks.push(unavailable('Debt', 'Total liabilities to equity'));
   } else if (balance.equity <= 0) {
     checks.push({
-      title: "Debt",
-      jargon: "Total liabilities to equity",
-      status: "bad",
-      text: "Shareholders' equity is zero or negative, which can indicate financial pressure and requires closer investigation."
+      title: 'Debt',
+      jargon: 'Total liabilities to equity',
+      status: 'bad',
+      text: 'Shareholders’ equity is zero or negative, which can indicate financial pressure and needs closer investigation.'
     });
   } else {
     checks.push({
-      title: "Debt",
-      jargon: "Total liabilities to equity",
-      status: debtRatio <= 1
-        ? "good"
-        : debtRatio <= 2.5 ? "warn" : "bad",
-      text: `As of ${balance.date || "the latest reporting date"}, it owed about $${debtRatio.toFixed(1)} for every $1 of shareholders' equity. Normal levels differ by industry.`
+      title: 'Debt',
+      jargon: 'Total liabilities to equity',
+      status: debtRatio <= 1 ? 'good' : debtRatio <= 2.5 ? 'warn' : 'bad',
+      text: `As of ${balance.date || 'the latest reporting date'}, it owed about $${debtRatio.toFixed(1)} for every $1 of shareholders’ equity. Normal levels differ by industry.`
     });
   }
 
   if (current.salesYoY == null) {
-    checks.push(unavailable("Growth", "Revenue growth"));
+    checks.push(unavailable('Growth', 'Revenue growth'));
   } else {
     checks.push({
-      title: "Growth",
-      jargon: "Revenue growth (year over year)",
+      title: 'Growth',
+      jargon: 'Revenue growth (year over year)',
       status: current.salesYoY >= 0.08
-        ? "good"
-        : current.salesYoY >= 0 ? "warn" : "bad",
-      text: `Sales were ${current.salesYoY >= 0 ? "up" : "down"} ${pct(current.salesYoY)} from the same quarter a year earlier.`
+        ? 'good'
+        : current.salesYoY >= 0 ? 'warn' : 'bad',
+      text: `Sales were ${current.salesYoY >= 0 ? 'up' : 'down'} ${pct(current.salesYoY)} from the same quarter a year earlier.`
     });
   }
 
   if (current.cash == null) {
-    checks.push(unavailable("Cash", "Free cash flow"));
+    checks.push(unavailable('Cash', 'Free cash flow'));
   } else {
     checks.push({
-      title: "Cash",
-      jargon: "Free cash flow",
+      title: 'Cash',
+      jargon: 'Free cash flow',
       status: current.cash > 0 && current.cash / current.sales >= 0.05
-        ? "good"
-        : current.cash > 0 ? "warn" : "bad",
+        ? 'good'
+        : current.cash > 0 ? 'warn' : 'bad',
       text: current.cash > 0
         ? `After capital spending, it generated ${money(current.cash)} in free cash flow in the latest quarter.`
         : `After capital spending, it used up ${money(-current.cash)} in free cash flow in the latest quarter.`
     });
   }
 
-  const checkStatus = title => checks.find(item => item.title === title)?.status;
+  const status = title => checks.find(item => item.title === title)?.status;
   const risks = [];
 
-  if (checkStatus("Profit") === "bad") {
-    risks.push("Low or negative profit can leave less room to handle unexpected costs.");
+  if (status('Profit') === 'bad') {
+    risks.push('Low or negative profit can leave less room to handle unexpected costs.');
   }
 
-  if (checkStatus("Debt") === "bad") {
-    risks.push("High debt or negative equity can increase financial pressure if business slows.");
+  if (status('Debt') === 'bad') {
+    risks.push('High debt or negative equity can increase financial pressure if business slows.');
   }
 
-  if (checkStatus("Growth") === "bad") {
-    risks.push("Shrinking sales may indicate weaker demand, although the figures alone do not explain why.");
+  if (status('Growth') === 'bad') {
+    risks.push('Shrinking sales may indicate weaker demand, although the figures alone do not explain why.');
   }
 
-  if (checkStatus("Cash") === "bad") {
-    risks.push("Negative free cash flow means the company used more cash after capital spending than it generated from operations.");
+  if (status('Cash') === 'bad') {
+    risks.push('Negative free cash flow means the company used more cash after capital spending than it generated from operations.');
   }
 
   if (!risks.length) {
-    risks.push("Competition, regulation, economic conditions, and execution problems can affect a company even when its latest financial figures look positive.");
+    risks.push('Competition, regulation, economic conditions, and execution problems can affect a company even when its latest financial figures look positive.');
   }
 
   const summary =
     `In the quarter ending ${current.end}, the company reported ${money(current.sales)} in sales` +
     (current.salesYoY != null
-      ? `, ${current.salesYoY >= 0 ? "up" : "down"} ${pct(current.salesYoY)} year over year`
-      : "") +
+      ? `, ${current.salesYoY >= 0 ? 'up' : 'down'} ${pct(current.salesYoY)} year over year`
+      : '') +
     (current.profit != null
       ? `, and ${current.profit >= 0 ? `a profit of ${money(current.profit)}` : `a loss of ${money(-current.profit)}`}`
-      : "") +
-    ". " +
+      : '') +
+    '. ' +
     (signals.length
-      ? `Notable changes include: ${signals.slice(0, 3).map(item => `${item.title.toLowerCase()}: ${item.text}`).join(" ")}`
-      : "There were no major changes in the tracked figures, or there is not enough comparable data to identify one.");
+      ? `Notable changes include: ${signals.slice(0, 3).map(item => `${item.title.toLowerCase()}: ${item.text}`).join(' ')}`
+      : 'There were no major changes in the tracked figures, or there is not enough comparable data to identify one.');
 
   return {
     periodLabel: `Latest quarter ended ${current.end}`,
@@ -824,47 +873,35 @@ function analyzeFacts(facts) {
   };
 }
 
-function latestInstantForDate(facts, concepts, targetDate) {
-  for (const concept of concepts) {
-    const rows = latestByEnd(usdRows(facts, concept), true)
-      .filter(row => dateMs(row.end) <= dateMs(targetDate))
-      .sort((a, b) => b.end.localeCompare(a.end));
-
-    if (rows.length) return rows[0].val;
-  }
-
-  return null;
-}
-
 /* ---------------- SEC FILINGS AND ANNOUNCEMENTS ---------------- */
 
 const ITEMS = {
-  "1.01": ["event", "New major agreement signed"],
-  "1.02": ["negative", "A major agreement ended"],
-  "1.03": ["negative", "Bankruptcy filing"],
-  "1.05": ["negative", "Cybersecurity incident reported"],
-  "2.01": ["event", "Company bought or sold a business"],
-  "2.02": ["event", "Quarterly or annual results announced"],
-  "2.03": ["watch", "New debt or financial obligation"],
-  "2.04": ["negative", "Debt payments accelerated"],
-  "2.05": ["watch", "Restructuring or layoffs announced"],
-  "2.06": ["negative", "Large asset write-down"],
-  "3.01": ["negative", "Stock exchange delisting notice"],
-  "3.02": ["watch", "New shares sold, which can dilute owners"],
-  "4.01": ["watch", "Change of auditor"],
-  "4.02": ["negative", "Past financial statements may need correcting"],
-  "5.01": ["event", "Change in company control"],
-  "5.02": ["event", "Executive or director change"],
-  "5.03": ["event", "Change to company governing documents"],
-  "5.07": ["event", "Shareholders voted on company matters"],
-  "7.01": ["event", "Company made a public disclosure"],
-  "8.01": ["event", "Other important company update"]
+  '1.01': ['event', 'New major agreement signed'],
+  '1.02': ['negative', 'A major agreement ended'],
+  '1.03': ['negative', 'Bankruptcy filing'],
+  '1.05': ['negative', 'Cybersecurity incident reported'],
+  '2.01': ['event', 'Company bought or sold a business'],
+  '2.02': ['event', 'Quarterly or annual results announced'],
+  '2.03': ['watch', 'New debt or financial obligation'],
+  '2.04': ['negative', 'Debt payments accelerated'],
+  '2.05': ['watch', 'Restructuring or layoffs announced'],
+  '2.06': ['negative', 'Large asset write-down'],
+  '3.01': ['negative', 'Stock exchange delisting notice'],
+  '3.02': ['watch', 'New shares sold, which can dilute owners'],
+  '4.01': ['watch', 'Change of auditor'],
+  '4.02': ['negative', 'Past financial statements may need correcting'],
+  '5.01': ['event', 'Change in company control'],
+  '5.02': ['event', 'Executive or director change'],
+  '5.03': ['event', 'Change to company governing documents'],
+  '5.07': ['event', 'Shareholders voted on company matters'],
+  '7.01': ['event', 'Company made a public disclosure'],
+  '8.01': ['event', 'Other important company update']
 };
 
 function filingUrl(cik, accession, document) {
   if (!accession || !document) return null;
 
-  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${String(accession).replace(/-/g, "")}/${document}`;
+  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${String(accession).replace(/-/g, '')}/${document}`;
 }
 
 function eventsFrom(submissions, cik) {
@@ -877,22 +914,22 @@ function eventsFrom(submissions, cik) {
 
   for (let i = 0; i < recent.form.length; i++) {
     if (
-      !String(recent.form[i]).startsWith("8-K") ||
-      dateMs(recent.filingDate[i]) < cutoff
+      !String(recent.form[i]).startsWith('8-K') ||
+      ms(recent.filingDate[i]) < cutoff
     ) continue;
 
-    const itemCodes = String(recent.items?.[i] || "")
-      .split(",")
+    const codes = String(recent.items?.[i] || '')
+      .split(',')
       .map(item => item.trim())
       .filter(item => ITEMS[item]);
 
-    if (!itemCodes.length) continue;
+    if (!codes.length) continue;
 
-    itemCodes.sort((a, b) =>
+    codes.sort((a, b) =>
       rank[ITEMS[a][0]] - rank[ITEMS[b][0]]
     );
 
-    const selected = itemCodes[0];
+    const selected = codes[0];
 
     events.push({
       date: recent.filingDate[i],
@@ -923,8 +960,8 @@ function earningsReportsFrom(submissions, cik) {
   const reports = [];
 
   for (let i = 0; i < recent.form.length; i++) {
-    const form = String(recent.form[i] || "");
-    if (form !== "10-Q" && form !== "10-K") continue;
+    const form = String(recent.form[i] || '');
+    if (form !== '10-Q' && form !== '10-K') continue;
 
     const periodEnd = recent.reportDate?.[i];
     const filedDate = recent.filingDate?.[i];
@@ -933,7 +970,7 @@ function earningsReportsFrom(submissions, cik) {
 
     reports.push({
       form,
-      type: form === "10-K" ? "Annual report" : "Quarterly report",
+      type: form === '10-K' ? 'Annual report' : 'Quarterly report',
       periodEnd,
       filedDate,
       url: filingUrl(
@@ -952,52 +989,53 @@ function earningsReportsFrom(submissions, cik) {
     .slice(0, 12);
 }
 
-function cleanFilingText(source, maxLength = 18000) {
-  return String(source || "")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]+>/g, " ")
+function cleanText(source, maxLength = 12000) {
+  return String(source || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--([\s\S]*?)-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/&#(\d+);/g, (_, value) => {
       const code = Number(value);
       return code > 0 && code <= 0x10ffff
         ? String.fromCodePoint(code)
-        : " ";
+        : ' ';
     })
     .replace(/&#x([\da-f]+);/gi, (_, value) => {
       const code = parseInt(value, 16);
       return code > 0 && code <= 0x10ffff
         ? String.fromCodePoint(code)
-        : " ";
+        : ' ';
     })
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maxLength);
 }
 
 async function addEventDetails(events) {
-  return Promise.all((events || []).map(async event => {
+  return Promise.all(events.map(async event => {
     if (!event.url) return event;
 
     try {
       const response = await fetch(event.url, {
-        headers: headers("text/html, text/plain, application/xhtml+xml"),
-        cache: "no-store"
+        headers: secHeaders('text/html, text/plain, application/xhtml+xml'),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(7000)
       });
 
       if (!response.ok) return event;
 
-      const details = cleanFilingText(await response.text(), 8000);
+      const details = cleanText(await response.text(), 7000);
 
       return { ...event, details: details || null };
     } catch (error) {
-      console.error("SEC filing detail error:", error.message);
+      console.error('SEC filing detail error:', error?.message);
       return event;
     }
   }));
@@ -1005,15 +1043,15 @@ async function addEventDetails(events) {
 
 async function companySourceFrom(submissions, cik) {
   const recent = submissions?.filings?.recent;
-  if (!recent?.form) return "";
+  if (!recent?.form) return '';
 
   const filings = recent.form
     .map((form, index) => ({
       form,
       index,
-      filed: recent.filingDate?.[index] || ""
+      filed: recent.filingDate?.[index] || ''
     }))
-    .filter(item => item.form === "10-K" || item.form === "10-Q")
+    .filter(item => item.form === '10-K' || item.form === '10-Q')
     .sort((a, b) => b.filed.localeCompare(a.filed));
 
   for (const filing of filings.slice(0, 3)) {
@@ -1027,30 +1065,30 @@ async function companySourceFrom(submissions, cik) {
 
     try {
       const response = await fetch(url, {
-        headers: headers("text/html, text/plain, application/xhtml+xml"),
-        cache: "no-store"
+        headers: secHeaders('text/html, text/plain, application/xhtml+xml'),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(7000)
       });
 
       if (!response.ok) continue;
 
-      const text = cleanFilingText(await response.text(), 500000);
+      const text = cleanText(await response.text(), 400000);
       const match = /\bitem\s+1\.?\s+business\b/i.exec(text);
 
       if (match) {
-        const start = match.index;
-        const rest = text.slice(start);
+        const rest = text.slice(match.index);
         const end = /\bitem\s+(?:1a\.?\s+risk\s+factors|2\.?\s+properties)\b/i.exec(rest.slice(30));
 
-        return (end ? rest.slice(0, end.index + 30) : rest).slice(0, 18000);
+        return (end ? rest.slice(0, end.index + 30) : rest).slice(0, 16000);
       }
 
-      return text.slice(0, 18000);
+      return text.slice(0, 16000);
     } catch (error) {
-      console.error("SEC company description source error:", error.message);
+      console.error('Company source error:', error?.message);
     }
   }
 
-  return "";
+  return '';
 }
 
 /* ---------------- GEMINI EXPLANATIONS ---------------- */
@@ -1058,22 +1096,6 @@ async function companySourceFrom(submissions, cik) {
 async function aiWrite(name, output, companySource, sicDescription, events) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-
-  const quarterText = output.quarters.map(row =>
-    `Quarter ended ${row.end}: revenue ${money(row.sales)}, revenue YoY ${pct(row.salesYoY)}, profit ${money(row.profit)}, profit margin ${pct(row.margin)}, free cash flow ${money(row.cash)}`
-  ).join("\n");
-
-  const signalText = output.signals
-    .map(item => `${item.kind}: ${item.title}. ${item.text}`)
-    .join("\n") || "No major changes identified.";
-
-  const eventInputs = (events || []).map((event, index) => ({
-    index,
-    date: event.date,
-    title: event.title,
-    category: event.kind,
-    filingDetails: event.details
-  }));
 
   const prompt = `You are Plainvest, a careful financial explainer for beginners.
 Use only the information supplied below. Do not invent company facts, causes, numbers, or consequences.
@@ -1092,77 +1114,78 @@ Return valid JSON only with this shape:
     }
   ]
 }
-
-COMPANY DESCRIPTION:
-Explain what the company sells or provides, who may use or buy it, and how it makes money, only where supported by the SEC source text. The SIC label is a broad industry label, not proof of specific products. If the filing text is insufficient, say that clearly. Use natural language suitable for a Grade 9 student.
-
-SUMMARY:
-Start with the latest quarter's sales, year-over-year change, and profit or loss if available. Explain the most important changes in the numbers and why they could matter. Mention positive and negative changes when relevant. If the data does not explain why a change happened, say so. Do not give buy/sell advice or stock-price predictions.
-
-EVENTS:
-Return one eventAnalyses entry for every supplied announcement, preserving its index. Explain the actual filing details rather than repeating the title. Do not infer details from a filing category alone. If filing text is missing or insufficient, be transparent. Explain possible business implications, not stock-price predictions. Keep every field concise.
+Explain what the company sells, who uses it, and how it makes money only where supported by the SEC text.
+Explain important changes in the numbers and mention both positive and negative changes where relevant.
+If the supplied data does not explain why something changed, say so.
+Explain each announcement using its filing details, not its category alone.
+Do not provide investment advice or stock-price predictions.
+Write naturally for a Grade 9 student.
 
 COMPANY: ${name}
-SEC INDUSTRY LABEL: ${sicDescription || "Not available"}
-
-SEC BUSINESS DESCRIPTION:
-${companySource || "Not available"}
-
-QUARTERS, NEWEST FIRST:
-${quarterText}
-
-CHANGES IN THE NUMBERS:
-${signalText}
-
-ANNOUNCEMENTS:
-${JSON.stringify(eventInputs)}`;
+SEC INDUSTRY LABEL: ${sicDescription || 'Not available'}
+SEC BUSINESS DESCRIPTION: ${companySource || 'Not available'}
+QUARTERS, NEWEST FIRST: ${JSON.stringify(output.quarters)}
+CHANGES IN THE NUMBERS: ${JSON.stringify(output.signals)}
+ANNOUNCEMENTS: ${JSON.stringify(events.map((event, index) => ({
+  index,
+  date: event.date,
+  title: event.title,
+  category: event.kind,
+  filingDetails: event.details
+})))}
+BASELINE SUMMARY: ${output.summary}`;
 
   try {
+    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": key
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            responseMimeType: "application/json",
+            responseMimeType: 'application/json',
             temperature: 0.2,
             maxOutputTokens: 6000
           }
         }),
-        cache: "no-store"
+        cache: 'no-store',
+        signal: AbortSignal.timeout(25000)
       }
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
+      console.error(
+        'Gemini API error:',
+        response.status,
+        (await response.text()).slice(0, 1000)
+      );
       return null;
     }
 
     const data = await response.json();
+
     const raw = data.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("");
+      ?.map(part => part.text || '')
+      .join('');
 
     if (!raw) return null;
 
-    const cleaned = raw.trim()
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/, "");
-
-    const parsed = JSON.parse(cleaned);
+    const parsed = JSON.parse(
+      raw.trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/, '')
+    );
 
     if (
-      typeof parsed.summary !== "string" ||
+      typeof parsed.summary !== 'string' ||
       !Array.isArray(parsed.risks)
-    ) {
-      return null;
-    }
+    ) return null;
 
     const analyses = new Map(
       (Array.isArray(parsed.eventAnalyses) ? parsed.eventAnalyses : [])
@@ -1170,7 +1193,7 @@ ${JSON.stringify(eventInputs)}`;
         .map(item => [item.index, item])
     );
 
-    const explainedEvents = (events || []).map((event, index) => {
+    const explainedEvents = events.map((event, index) => {
       const analysis = analyses.get(index);
 
       return {
@@ -1178,19 +1201,19 @@ ${JSON.stringify(eventInputs)}`;
         explanation: analysis ? {
           whatHappened: String(
             analysis.whatHappened ||
-            "The available filing text does not explain this announcement in enough detail."
+            'The available filing text does not explain this announcement in enough detail.'
           ),
           whyItMatters: String(
             analysis.whyItMatters ||
-            "Its importance cannot be determined from the available filing details."
+            'Its importance cannot be determined from the available filing details.'
           ),
           potentialImpact: String(
             analysis.potentialImpact ||
-            "The business impact is unclear from the available information."
+            'The business impact is unclear from the available information.'
           ),
           uncertainty: String(
             analysis.uncertainty ||
-            "The available information does not establish the full implications."
+            'The available information does not establish the full implications.'
           )
         } : null
       };
@@ -1198,70 +1221,16 @@ ${JSON.stringify(eventInputs)}`;
 
     return {
       companyDescription:
-        typeof parsed.companyDescription === "string"
+        typeof parsed.companyDescription === 'string'
           ? parsed.companyDescription.trim()
-          : "",
+          : '',
       summary: parsed.summary,
       risks: parsed.risks.slice(0, 3).map(String),
       events: explainedEvents
     };
   } catch (error) {
-    console.error("Gemini aiWrite failed:", error);
+    console.error('Gemini explanation failed:', error?.message);
     return null;
-  }
-}
-
-/* ---------------- ETF AND FOREIGN TICKERS ---------------- */
-
-const FOREIGN_MSG =
-  "That looks like a stock listed on a non-US exchange. Plainvest currently supports US-listed companies only. If the company also trades in the US, try its US ticker.";
-
-const ETF_MSG =
-  "That looks like an ETF or fund. ETFs don't have sales or profits the way companies do, so Plainvest can't analyze them yet.";
-
-const FOREIGN =
-  /^[A-Z0-9]{1,6}[.:](TO|V|NE|CN|L|T|HK|AX|NZ|SI|SW|PA|DE|F|MI|MC|AS|ST|OL|HE|CO|SS|SZ|KS|KQ|NS|BO|SA|MX|TW|JK|BK|KL|TA|IR)$|^(TSX|TSXV|TSE|LSE|LON|ASX|HKEX|SGX|FRA|EPA|NSE|BSE|TYO|SHA|SHE|KRX|BME|SWX|AMS)[:.]/;
-
-const ETFS = new Set((
-  "SPY QQQ VOO VTI IVV DIA IWM VT VEA VWO VXUS BND AGG GLD IAU SLV " +
-  "XLK XLF XLE XLV XLY XLP XLI XLU XLB XLRE XLC ARKK ARKG ARKW " +
-  "SCHD SCHB SCHX SCHG VUG VTV VIG VYM VGT VHT VNQ IJH IJR IJK MDY " +
-  "EFA IEFA IEMG EEM TLT IEF SHY HYG LQD JNK USO UNG SMH SOXX SOXL " +
-  "TQQQ SQQQ UPRO SPXL SPXS TNA TZA IVW IVE IWF IWD IWB IWV QQQM " +
-  "SPLG SPYG SPYV RSP QUAL USMV DGRO DVY SDY JEPI JEPQ BITO IBIT " +
-  "FBTC GBTC ETHE XBI IBB KRE KBE XOP OIH GDX GDXJ ITB XHB VXX UVXY"
-).split(/\s+/));
-
-let fundSet = null;
-let fundAt = 0;
-
-async function isFund(ticker) {
-  if (ETFS.has(ticker)) return true;
-
-  try {
-    if (!fundSet || Date.now() - fundAt > 7 * DAY) {
-      const response = await fetch(
-        "https://www.sec.gov/files/company_tickers_mf.json",
-        { headers: headers(), cache: "no-store" }
-      );
-
-      if (!response.ok) return false;
-
-      const data = await response.json();
-      const index = data.fields?.indexOf("symbol");
-
-      fundSet = new Set(
-        index >= 0
-          ? (data.data || []).map(row => String(row[index]).toUpperCase())
-          : []
-      );
-
-      fundAt = Date.now();
-    }
-
-    return fundSet.has(ticker);
-  } catch {
-    return false;
   }
 }
 
@@ -1269,51 +1238,53 @@ async function isFund(ticker) {
 
 export default async function handler(req, res) {
   res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
   );
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("Surrogate-Control", "no-store");
-  res.setHeader("Vary", "x-forwarded-for, x-real-ip");
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Vary', 'x-forwarded-for, x-real-ip');
 
   let reservationKey = null;
 
   try {
-    if (req.method && req.method !== "GET") {
-      res.setHeader("Allow", "GET");
+    if (req.method && req.method !== 'GET') {
+      res.setHeader('Allow', 'GET');
+
       throw new HttpError(
         405,
-        "Method not allowed. Use GET /api/analyze?ticker=AAPL."
+        'Method not allowed. Use GET /api/analyze?ticker=AAPL.'
       );
     }
 
-    if (!UA()) {
+    if (!ua()) {
       throw new HttpError(
         500,
-        "Server setup incomplete: SEC_USER_AGENT is missing."
+        'Server setup incomplete: SEC_USER_AGENT is missing.'
       );
     }
 
-    const raw = String(req.query?.ticker || "")
-      .trim()
-      .toUpperCase();
+    const raw = String(
+      req.query?.ticker ||
+      new URL(req.url, 'https://plainvest.invalid').searchParams.get('ticker') ||
+      ''
+    ).trim().toUpperCase();
 
-    if (FOREIGN.test(raw)) {
+    if (FOREIGN_RE.test(raw)) {
       throw new HttpError(422, FOREIGN_MSG);
     }
 
-    const ticker = raw.replace(".", "-");
+    const ticker = raw.replace(/\./g, '-');
 
     if (!/^[A-Z0-9-]{1,8}$/.test(ticker)) {
-      throw new HttpError(400, "Enter a valid ticker, like AAPL.");
+      throw new HttpError(400, 'Enter a valid ticker, like AAPL.');
     }
 
-    if (ETFS.has(ticker)) {
+    if (ETF_NAMES.has(ticker)) {
       throw new HttpError(422, ETF_MSG);
     }
 
-    // Check the ticker before reserving a daily analysis.
+    // Validate the ticker before reserving a daily analysis.
     const company = await lookup(ticker);
 
     if (!company) {
@@ -1327,18 +1298,26 @@ export default async function handler(req, res) {
       );
     }
 
-    reservationKey = await reserveDailyAnalysis(req);
+    reservationKey = await reserve(req);
 
-    const cik = String(company.cik_str).padStart(10, "0");
+    const cik = String(company.cik_str).padStart(10, '0');
 
     const [factsResponse, submissionsResponse] = await Promise.all([
       fetch(
         `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
-        { headers: headers(), cache: "no-store" }
+        {
+          headers: secHeaders(),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(20000)
+        }
       ),
       fetch(
         `https://data.sec.gov/submissions/CIK${cik}.json`,
-        { headers: headers(), cache: "no-store" }
+        {
+          headers: secHeaders(),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000)
+        }
       ).catch(() => null)
     ]);
 
@@ -1353,7 +1332,7 @@ export default async function handler(req, res) {
     const unsupportedCompany = () => {
       const forms = new Set(submissions?.filings?.recent?.form || []);
 
-      if (forms.has("20-F") || forms.has("40-F")) {
+      if (forms.has('20-F') || forms.has('40-F')) {
         return new HttpError(
           422,
           `${company.title} files foreign-company reports that this version of Plainvest cannot yet read.`
@@ -1375,7 +1354,10 @@ export default async function handler(req, res) {
     }
 
     if (!factsResponse.ok) {
-      throw new HttpError(502, "The SEC didn't respond. Try again shortly.");
+      throw new HttpError(
+        502,
+        'The SEC did not respond successfully. Try again shortly.'
+      );
     }
 
     const facts = await factsResponse.json();
@@ -1396,7 +1378,7 @@ export default async function handler(req, res) {
 
     output.quarters = output.quarters.map(quarter => {
       const report = output.earningsReports.find(item =>
-        near(dateMs(item.periodEnd), dateMs(quarter.end), 7)
+        near(ms(item.periodEnd), ms(quarter.end), 7)
       );
 
       return {
@@ -1417,7 +1399,7 @@ export default async function handler(req, res) {
       company.title,
       output,
       companySource,
-      submissions?.sicDescription || "",
+      submissions?.sicDescription || '',
       output.events
     );
 
@@ -1428,11 +1410,11 @@ export default async function handler(req, res) {
       ...(ai || {})
     });
 
-    // Successful analyses retain their reservation until UTC midnight.
+    // Keep the reservation after a successful response until UTC midnight.
     reservationKey = null;
   } catch (error) {
     if (reservationKey) {
-      await releaseDailyAnalysis(reservationKey);
+      await release(reservationKey);
       reservationKey = null;
     }
 
@@ -1441,10 +1423,10 @@ export default async function handler(req, res) {
       return;
     }
 
-    console.error("Plainvest analysis failed:", error);
+    console.error('Plainvest analysis failed:', error);
 
     res.status(500).json({
-      error: "Something went wrong while analyzing this company. Please try again."
+      error: 'Something went wrong while analyzing this company. Please try again.'
     });
   }
 }
