@@ -8,7 +8,7 @@ class HttpError extends Error {
 }
 
 const DAY = 86400000;
-const LIMIT = 3;
+const LIMIT = 10;
 const ua = () => process.env.SEC_USER_AGENT;
 
 const secHeaders = (accept = 'application/json') => ({
