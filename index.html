@@ -1,552 +1,876 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f9fc">
-  <title>Plainvest — Stocks explained in plain English</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #f7f9fc;
-      --card: #ffffff;
-      --ink: #14213a;
-      --muted: #69768c;
-      --line: #e5eaf2;
-      --blue: #1c4bb0;
-      --profit: #3569db;
-      --pale: #edf3ff;
-      --green: #16845b;
-      --green-bg: #e9f7f0;
-      --red: #c04444;
-      --red-bg: #fff0ef;
-      --amber: #986516;
-      --amber-bg: #fff5df;
-      --shadow: 0 10px 35px rgba(23, 45, 82, .045);
-      --radius: 20px;
-    }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f5f7">
+<title>Plainvest: stocks explained in plain English</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--ink);
-      font-family: "DM Sans", sans-serif;
-      line-height: 1.55;
-    }
-    button, input { font: inherit; }
-    button { cursor: pointer; }
-    .wrap { width: min(1120px, calc(100% - 32px)); margin: auto; }
-    header {
-      border-bottom: 1px solid var(--line);
-      background: rgba(255,255,255,.88);
-    }
-    .nav {
-      min-height: 76px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    .brand {
-      font-family: "Bricolage Grotesque", sans-serif;
-      font-size: 27px;
-      font-weight: 800;
-      letter-spacing: -1.2px;
-    }
-    .brand span { color: var(--blue); }
-    .nav-note { color: var(--muted); font-size: 13px; }
-    .hero { padding: 48px 0 26px; }
-    .eyebrow {
-      color: var(--blue);
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      font-size: 11px;
-      font-weight: 700;
-    }
-    h1, h2, h3, p { margin-top: 0; }
-    h1, h2, h3 { font-family: "Bricolage Grotesque", sans-serif; letter-spacing: -.45px; }
-    h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.05; margin: 12px 0; }
-    .hero p { max-width: 650px; color: var(--muted); margin-bottom: 24px; }
-    .search {
-      display: flex;
-      gap: 10px;
-      max-width: 560px;
-    }
-    .search input {
-      flex: 1;
-      min-width: 0;
-      border: 1px solid #dbe2ed;
-      border-radius: 13px;
-      padding: 14px 16px;
-      background: white;
-      outline: none;
-    }
-    .search input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #1c4bb018; }
-    .primary {
-      background: var(--blue);
-      color: white;
-      border: 0;
-      border-radius: 13px;
-      padding: 13px 20px;
-      font-weight: 700;
-    }
-    .primary:disabled { opacity: .6; cursor: wait; }
-    .limit-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
-    #message { display: none; margin: 16px 0; padding: 13px 15px; border-radius: 12px; }
-    #message.error { display: block; color: var(--red); background: var(--red-bg); }
-    #message.info { display: block; color: var(--blue); background: var(--pale); }
-    #results { display: none; padding: 12px 0 60px; }
-    .company-head { margin: 12px 0 22px; }
-    .company-name { font-size: clamp(28px, 4vw, 38px); margin: 0; }
-    .ticker-label { color: var(--blue); font-size: 13px; font-weight: 700; }
-    .period { color: var(--muted); font-size: 12px; margin-top: 6px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 23px;
-      box-shadow: var(--shadow);
-      margin-bottom: 18px;
-      min-width: 0;
-    }
-    .card h2 { font-size: 21px; margin-bottom: 5px; }
-    .sub { color: var(--muted); font-size: 13px; margin-bottom: 17px; }
-    .description { font-size: 15px; color: #34435b; margin: 10px 0 0; }
-    .summary { font-size: 15px; color: #34435b; }
-    .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
-    .stat {
-      background: #f8faff;
-      border: 1px solid var(--line);
-      border-radius: 15px;
-      padding: 15px;
-      min-width: 0;
-    }
-    .stat-label { font-size: 12px; color: var(--muted); }
-    .stat-value { font-family: "Bricolage Grotesque", sans-serif; font-size: clamp(19px,2.5vw,26px); font-weight: 700; overflow-wrap: anywhere; margin-top: 4px; }
-    .stat-detail { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .two-col { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
-    .chart-wrap { width: 100%; overflow: hidden; }
-    .chart { display: block; width: 100%; height: auto; overflow: visible; }
-    .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 9px; }
-    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
-    th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-    td:first-child { font-weight: 700; }
-    .positive { color: var(--green); }
-    .negative { color: var(--red); }
-    .neutral { color: var(--muted); }
-    .signal-list, .event-list, .risk-list { display: grid; gap: 11px; }
-    .signal, .event, .risk {
-      padding: 15px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: #fff;
-    }
-    .signal-top, .event-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-    .signal h3, .event h3 { font-size: 16px; margin: 0 0 5px; }
-    .signal p, .event p, .risk p { margin: 0; font-size: 13px; color: #4f5d72; }
-    .pill { display: inline-block; flex: 0 0 auto; border-radius: 100px; padding: 4px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-    .pill.positive, .status.good { color: var(--green); background: var(--green-bg); }
-    .pill.negative, .status.bad { color: var(--red); background: var(--red-bg); }
-    .pill.watch, .status.warn { color: var(--amber); background: var(--amber-bg); }
-    .pill.event, .status.na { color: var(--muted); background: #eef1f6; }
-    .checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
-    .check { border: 1px solid var(--line); border-radius: 15px; padding: 16px; }
-    .check-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-    .check h3 { margin: 0; font-size: 17px; }
-    .status { border-radius: 100px; padding: 4px 9px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-    .check .jargon { color: var(--muted); font-size: 11px; margin: 7px 0; }
-    .check p { color: #4f5d72; font-size: 13px; margin: 0; }
-    .balance-groups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
-    details.balance-box { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-    details.balance-box summary { cursor: pointer; padding: 15px; font-weight: 700; background: #f8faff; list-style-position: inside; }
-    .balance-content { padding: 4px 15px 12px; }
-    .balance-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
-    .balance-row:last-child { border-bottom: 0; }
-    .balance-row span:first-child { color: #536178; }
-    .balance-row strong { text-align: right; overflow-wrap: anywhere; }
-    .balance-total { border-top: 1px solid var(--line); font-weight: 700; }
-    .event-date { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
-    .event a, .source-link { color: var(--blue); text-decoration: none; font-size: 12px; font-weight: 700; }
-    .event a:hover, .source-link:hover { text-decoration: underline; }
-    .event-explanation { display: grid; gap: 8px; margin-top: 12px; }
-    .event-explanation div { font-size: 13px; color: #4f5d72; }
-    .event-explanation strong { color: var(--ink); }
-    .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
-    footer { border-top: 1px solid var(--line); padding: 22px 0 32px; color: var(--muted); font-size: 12px; }
-    .disclaimer { max-width: 820px; }
-    @media (max-width: 720px) {
-      .hero { padding-top: 34px; }
-      .stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-      .two-col, .balance-groups { grid-template-columns: 1fr; gap: 0; }
-      .checks { grid-template-columns: 1fr; }
-      .card { padding: 18px; border-radius: 16px; }
-      .nav-note { display: none; }
-      .search { align-items: stretch; }
-      .search .primary { padding: 12px 14px; }
-    }
-    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
-  </style>
+<style>
+:root {
+  --bg:#f2f5f7;
+  --card:#fff;
+  --ink:#12202b;
+  --mute:#566673;
+  --line:#d8e0e6;
+  --acc:#0e6f8f;
+  --acc-ink:#fff;
+  --good:#1f6b43;
+  --goodbg:#e1f2e8;
+  --warn:#85590c;
+  --warnbg:#faefd6;
+  --bad:#8f2433;
+  --badbg:#f9e1e5;
+}
+
+* { box-sizing:border-box; }
+
+html {
+  scroll-behavior:smooth;
+  scroll-padding-top:20px;
+}
+
+body {
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font:17px/1.6 "DM Sans",system-ui,sans-serif;
+}
+
+.wrap {
+  max-width:860px;
+  margin:0 auto;
+  padding:0 20px;
+}
+
+h1,h2,h3 {
+  font-family:"Bricolage Grotesque","DM Sans",system-ui,sans-serif;
+  line-height:1.15;
+  margin:0;
+}
+
+nav {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:20px 0;
+}
+
+.logo {
+  font:700 22px "Bricolage Grotesque",sans-serif;
+  color:var(--acc);
+}
+
+.nav-note {
+  color:var(--mute);
+  font-size:14px;
+}
+
+header.hero {
+  padding:28px 0 32px;
+}
+
+h1 {
+  font-size:clamp(34px,7vw,58px);
+  letter-spacing:-.02em;
+  max-width:14ch;
+}
+
+.sub {
+  color:var(--mute);
+  max-width:52ch;
+  margin:16px 0 28px;
+  font-size:18px;
+}
+
+.demo {
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:20px;
+}
+
+.demo label {
+  font-weight:700;
+  display:block;
+  margin-bottom:8px;
+}
+
+.row {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+input {
+  flex:1;
+  min-width:140px;
+  font:inherit;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--bg);
+  color:var(--ink);
+  text-transform:uppercase;
+}
+
+button {
+  font:inherit;
+  font-weight:700;
+  border:0;
+  border-radius:10px;
+  padding:12px 18px;
+  background:var(--acc);
+  color:var(--acc-ink);
+  cursor:pointer;
+}
+
+button.chip {
+  background:transparent;
+  color:var(--ink);
+  border:1px solid var(--line);
+  padding:8px 12px;
+  font-weight:500;
+}
+
+button.chip:hover,
+button.chip[aria-pressed="true"] {
+  border-color:var(--acc);
+  color:var(--acc);
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline:3px solid var(--acc);
+  outline-offset:2px;
+}
+
+button:disabled {
+  opacity:.6;
+  cursor:wait;
+}
+
+.chips {
+  margin-top:12px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+  color:var(--mute);
+  font-size:14px;
+}
+
+#msg {
+  margin:12px 0 0;
+  color:var(--bad);
+  font-size:15px;
+  min-height:1px;
+  overflow-wrap:anywhere;
+}
+
+#result {
+  margin-top:20px;
+  overflow-wrap:anywhere;
+}
+
+.head {
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:baseline;
+  margin-bottom:6px;
+}
+
+.head h2 {
+  font-size:28px;
+}
+
+.tag {
+  color:var(--mute);
+  font-size:15px;
+}
+
+.summary {
+  font-size:19px;
+  margin:12px 0 20px;
+  padding-left:14px;
+  border-left:4px solid var(--acc);
+}
+
+.check {
+  display:grid;
+  grid-template-columns:1fr;
+  gap:6px;
+  padding:16px 0;
+  border-top:1px solid var(--line);
+}
+
+.ctop {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.ctop h3 {
+  font-size:19px;
+}
+
+.jargon {
+  color:var(--mute);
+  font-size:13px;
+}
+
+.pill {
+  font-size:14px;
+  font-weight:700;
+  padding:3px 10px;
+  border-radius:99px;
+  white-space:nowrap;
+}
+
+.na { background:var(--bg); color:var(--mute); }
+.good { background:var(--goodbg); color:var(--good); }
+.warn { background:var(--warnbg); color:var(--warn); }
+.bad { background:var(--badbg); color:var(--bad); }
+
+.check p { margin:0; }
+
+.event-explanation {
+  margin-top:8px;
+  display:grid;
+  gap:8px;
+}
+
+.event-explanation p { margin:0; }
+
+.event-explanation strong { color:var(--ink); }
+
+.event-details {
+  margin-top:8px;
+  font-size:14px;
+}
+
+.event-details summary {
+  color:var(--acc);
+  cursor:pointer;
+}
+
+.event-details p { margin-top:8px; }
+
+.risks {
+  border-top:1px solid var(--line);
+  padding-top:16px;
+}
+
+.risks h3 {
+  font-size:19px;
+  margin-bottom:6px;
+}
+
+.risks ul {
+  margin:0;
+  padding-left:20px;
+}
+
+.note {
+  margin-top:18px;
+  font-size:14px;
+  color:var(--mute);
+  background:var(--bg);
+  border-radius:10px;
+  padding:12px 14px;
+}
+
+section.how {
+  padding:44px 0 20px;
+}
+
+section.how h2 {
+  font-size:30px;
+  margin-bottom:16px;
+}
+
+.cols {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:24px;
+}
+
+.cols h3 {
+  font-size:19px;
+  margin-bottom:6px;
+}
+
+.cols p {
+  margin:0;
+  color:var(--mute);
+}
+
+footer {
+  padding:32px 0 48px;
+  color:var(--mute);
+  font-size:14px;
+  border-top:1px solid var(--line);
+  margin-top:36px;
+}
+
+.sec {
+  font-size:20px;
+  margin:24px 0 4px;
+}
+
+.tw {
+  overflow-x:auto;
+  max-width:100%;
+}
+
+.qt {
+  border-collapse:collapse;
+  width:100%;
+  font-size:15px;
+  white-space:nowrap;
+}
+
+.qt th,.qt td {
+  text-align:right;
+  padding:8px 10px;
+  border-top:1px solid var(--line);
+}
+
+.qt th:first-child,.qt td:first-child { text-align:left; }
+
+.qt th {
+  color:var(--mute);
+  font-weight:500;
+  font-size:13px;
+  border-top:0;
+}
+
+.pos { color:var(--good); }
+.neg { color:var(--bad); }
+
+a { color:var(--acc); }
+
+.about {
+  font-size:18px;
+  margin:10px 0 2px;
+}
+
+.loading { padding:8px 0; }
+.loading p { margin:10px 0; color:var(--mute); }
+
+.spin {
+  width:28px;
+  height:28px;
+  border:3px solid var(--line);
+  border-top-color:var(--acc);
+  border-radius:50%;
+}
+
+.sk i {
+  display:block;
+  height:14px;
+  border-radius:7px;
+  background:var(--line);
+  margin:10px 0;
+}
+
+.sk i:nth-child(2) { width:80%; }
+.sk i:nth-child(3) { width:60%; }
+
+@media (prefers-reduced-motion:no-preference) {
+  .spin { animation:sp .8s linear infinite; }
+  .sk i { animation:pl 1.2s ease-in-out infinite alternate; }
+  #result>* { animation:in .25s ease-out; }
+
+  @keyframes sp { to { transform:rotate(360deg); } }
+  @keyframes pl { from { opacity:.4; } to { opacity:1; } }
+  @keyframes in { from { opacity:0; } to { opacity:1; } }
+}
+
+@media (max-width:480px) {
+  .wrap { padding:0 14px; }
+  .demo { padding:15px; }
+  .row button { width:100%; }
+  .head h2 { font-size:24px; }
+  .summary { font-size:17px; }
+}
+
+@media (prefers-color-scheme:dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0e171d;
+    --card:#16232c;
+    --ink:#e8eff3;
+    --mute:#9db0bc;
+    --line:#2a3b47;
+    --acc:#5cc3e0;
+    --acc-ink:#0e171d;
+    --good:#7fdba5;
+    --goodbg:#173a28;
+    --warn:#f0c46a;
+    --warnbg:#3b2f14;
+    --bad:#f2a0ac;
+    --badbg:#411c24;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:#0e171d;
+  --card:#16232c;
+  --ink:#e8eff3;
+  --mute:#9db0bc;
+  --line:#2a3b47;
+  --acc:#5cc3e0;
+  --acc-ink:#0e171d;
+  --good:#7fdba5;
+  --goodbg:#173a28;
+  --warn:#f0c46a;
+  --warnbg:#3b2f14;
+  --bad:#f2a0ac;
+  --badbg:#411c24;
+}
+</style>
 </head>
+
 <body>
-  <header>
-    <div class="wrap nav">
-      <div class="brand">plain<span>vest</span></div>
-      <div class="nav-note">Understand the business behind the ticker</div>
+<div class="wrap">
+  <nav>
+    <span class="logo">Plainvest</span>
+    <span class="nav-note">Beta</span>
+  </nav>
+
+  <header class="hero">
+    <h1>Understand a stock before you buy it.</h1>
+    <p class="sub">Type a ticker. Get a plain-English read on how the company makes money, whether it's profitable, how much it owes, and what could go wrong. No finance degree needed.</p>
+
+    <div class="demo">
+      <form id="searchForm">
+        <label for="t">Look up a US-listed company</label>
+        <div class="row">
+          <input id="t" name="ticker" maxlength="8" placeholder="e.g. AAPL" autocomplete="off" autocapitalize="characters" aria-describedby="msg" required>
+          <button id="go" type="submit">Explain it</button>
+        </div>
+      </form>
+
+      <div class="chips">
+        <span>Try:</span>
+        <button class="chip" type="button" data-t="AAPL">AAPL</button>
+        <button class="chip" type="button" data-t="KO">KO</button>
+        <button class="chip" type="button" data-t="TSLA">TSLA</button>
+      </div>
+
+      <p id="msg" role="status" aria-live="polite"></p>
+      <div id="result" aria-live="polite"></div>
     </div>
   </header>
 
-  <main class="wrap">
-    <section class="hero">
-      <div class="eyebrow">Investing, in plain English</div>
-      <h1>Understand a company<br>before you invest.</h1>
-      <p>Explore financial results, recent SEC announcements, cash flow, and balance-sheet figures without getting buried in jargon.</p>
-      <form class="search" id="searchForm">
-        <input id="tickerInput" name="ticker" maxlength="8" placeholder="Enter a ticker, e.g. AAPL" autocomplete="off" aria-label="Stock ticker" required>
-        <button class="primary" id="searchButton" type="submit">Analyze company</button>
-      </form>
-      <div class="limit-note">Up to 3 successful company analyses per day.</div>
-      <div id="message" role="status" aria-live="polite"></div>
-    </section>
-
-    <section id="results" aria-live="polite">
-      <div class="company-head">
-        <div class="ticker-label" id="tickerLabel"></div>
-        <h2 class="company-name" id="companyName"></h2>
-        <div class="period" id="periodLabel"></div>
+  <section class="how">
+    <h2>What you get</h2>
+    <div class="cols">
+      <div>
+        <h3>Jargon, translated</h3>
+        <p>Every number comes with its technical name and what it means for you.</p>
       </div>
-
-      <section class="card">
-        <div class="eyebrow">The business</div>
-        <h2>What the company does</h2>
-        <p class="description" id="companyDescription">Description unavailable.</p>
-      </section>
-
-      <section class="card">
-        <div class="eyebrow">The latest results</div>
-        <h2>What changed?</h2>
-        <p class="sub" id="summaryText">Based on the latest available SEC filings.</p>
-        <div class="stat-grid" id="statGrid"></div>
-      </section>
-
-      <div class="two-col">
-        <section class="card">
-          <h2>Revenue over time</h2>
-          <p class="sub">Quarterly sales, newest quarter first in the table below.</p>
-          <div class="chart-wrap"><svg id="revenueChart" class="chart" viewBox="0 0 520 245" role="img" aria-label="Quarterly revenue chart"></svg></div>
-          <div class="chart-legend"><span><i class="dot" style="background:#1c4bb0"></i>Revenue</span></div>
-        </section>
-        <section class="card">
-          <h2>Profit over time</h2>
-          <p class="sub">Profit can fall below zero when the company reports a loss.</p>
-          <div class="chart-wrap"><svg id="profitChart" class="chart" viewBox="0 0 520 245" role="img" aria-label="Quarterly profit chart"></svg></div>
-          <div class="chart-legend"><span><i class="dot" style="background:#3569db"></i>Profit or loss</span></div>
-        </section>
+      <div>
+        <h3>Four quick checks</h3>
+        <p>Profit, debt, growth, and cash, each with a clear good, watch, or concern label.</p>
       </div>
-
-      <section class="card">
-        <h2>Free cash flow over time</h2>
-        <p class="sub">Cash generated after capital spending. A negative quarter means more cash went out than came in after that spending.</p>
-        <div class="chart-wrap"><svg id="cashChart" class="chart" viewBox="0 0 900 260" role="img" aria-label="Quarterly free cash flow chart"></svg></div>
-        <div class="chart-legend"><span><i class="dot" style="background:#16845b"></i>Positive free cash flow</span><span><i class="dot" style="background:#c04444"></i>Negative free cash flow</span></div>
-      </section>
-
-      <section class="card">
-        <h2>Quarter-by-quarter results</h2>
-        <p class="sub">Year-over-year compares each quarter with the same quarter one year earlier, not the previous quarter.</p>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Quarter ended</th><th>Revenue</th><th>Revenue YoY</th><th>Profit / loss</th><th>Profit margin</th><th>Free cash flow</th></tr></thead>
-            <tbody id="quarterRows"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Balance sheet</h2>
-        <p class="sub" id="balanceDate">Latest available reporting date. Figures depend on what the company separately reports.</p>
-        <div class="stat-grid" id="balanceSummary"></div>
-        <div style="height:14px"></div>
-        <div class="balance-groups">
-          <div>
-            <div class="eyebrow">What the company owns</div>
-            <div id="assetsBoxes"></div>
-          </div>
-          <div>
-            <div class="eyebrow">How it is funded</div>
-            <div id="liabilitiesBoxes"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>What changed in the numbers</h2>
-        <p class="sub">Not every change is good or bad on its own. These are signals to investigate, not predictions.</p>
-        <div id="signals" class="signal-list"></div>
-      </section>
-
-      <section class="card">
-        <h2>Quick checks</h2>
-        <p class="sub">A simple snapshot of profitability, debt, growth, and cash generation.</p>
-        <div id="checks" class="checks"></div>
-      </section>
-
-      <section class="card">
-        <h2>Recent company announcements</h2>
-        <p class="sub">SEC filings from the last 90 days when available. Open a filing for the original source.</p>
-        <div id="events" class="event-list"></div>
-        <div style="margin-top:12px"><a class="source-link" href="https://www.sec.gov/edgar/search/" target="_blank" rel="noopener noreferrer">Search SEC filings</a></div>
-      </section>
-
-      <section class="card">
-        <h2>Risks to keep in mind</h2>
-        <div id="risks" class="risk-list"></div>
-      </section>
-    </section>
-  </main>
+      <div>
+        <h3>Risks up front</h3>
+        <p>The biggest things that could hurt the company, stated plainly.</p>
+      </div>
+    </div>
+  </section>
 
   <footer>
-    <div class="wrap disclaimer">
-      <strong>Important:</strong> Plainvest is an educational tool, not financial advice. Financial data can be incomplete or presented differently across companies. SEC filings are the source of the financial figures; AI-written explanations may be imperfect. Always check the original filing before making an investment decision.
-    </div>
+    <p>Plainvest explains public company information for education. It does not give investment advice or tell you what to buy or sell. Figures come from public SEC filings and may lag recent events.</p>
   </footer>
+</div>
 
-  <script>
-    const $ = id => document.getElementById(id);
-    const money = value => {
-      if (value == null || !Number.isFinite(Number(value))) return "Not reported";
-      const n = Number(value);
-      const abs = Math.abs(n);
-      const sign = n < 0 ? "-$" : "$";
-      if (abs >= 1e9) return sign + (abs / 1e9).toFixed(1) + "B";
-      if (abs >= 1e6) return sign + (abs / 1e6).toFixed(1) + "M";
-      if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + "K";
-      return sign + Math.round(abs).toLocaleString("en-US");
-    };
-    const percent = value => value == null || !Number.isFinite(Number(value))
-      ? "Not reported"
-      : (Number(value) >= 0 ? "+" : "") + (Number(value) * 100).toFixed(1) + "%";
-    const dateLabel = value => {
-      if (!value) return "Date unavailable";
-      const date = new Date(value + "T12:00:00Z");
-      return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", {year:"numeric", month:"short", day:"numeric", timeZone:"UTC"});
-    };
-    const safe = value => String(value ?? "").replace(/[&<>"']/g, c => ({
-      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
-    }[c]));
-    const tone = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : "neutral";
+<script>
+"use strict";
 
-    function showMessage(text, type = "info") {
-      $("message").textContent = text;
-      $("message").className = type;
+(() => {
+  const $ = id => document.getElementById(id);
+
+  const LABELS = {
+    good:"Looks good",
+    warn:"Watch this",
+    bad:"Concern",
+    na:"Not enough data"
+  };
+
+  const KINDS = {
+    positive:["good","Positive"],
+    negative:["bad","Negative"],
+    watch:["warn","Watch"],
+    event:["na","Event"]
+  };
+
+  const escapeHTML = value =>
+    String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      '"':"&quot;",
+      "'":"&#39;"
+    })[char]);
+
+  const money = value => {
+    if (value == null || !Number.isFinite(Number(value))) return "—";
+
+    const n = Number(value);
+    const abs = Math.abs(n);
+    const sign = n < 0 ? "-" : "";
+
+    if (abs >= 1e9) return sign + "$" + (abs / 1e9).toFixed(1) + "B";
+    if (abs >= 1e6) return sign + "$" + (abs / 1e6).toFixed(0) + "M";
+    if (abs >= 1e3) return sign + "$" + Math.round(abs).toLocaleString("en-US");
+
+    return sign + "$" + abs.toLocaleString("en-US", {
+      maximumFractionDigits:0
+    });
+  };
+
+  const percent = value => {
+    if (value == null || !Number.isFinite(Number(value))) return "—";
+    const n = Number(value) * 100;
+    return (n > 0 ? "+" : "") + n.toFixed(0) + "%";
+  };
+
+  const signClass = value =>
+    value == null ? "" : Number(value) < 0 ? "neg" : "pos";
+
+  const quarterLabel = value => {
+    if (!value) return "—";
+
+    const date = new Date(value + "T00:00:00Z");
+    if (Number.isNaN(date.getTime())) return escapeHTML(value);
+
+    return date.toLocaleDateString("en-US", {
+      month:"short",
+      year:"numeric",
+      timeZone:"UTC"
+    });
+  };
+
+  function showMessage(message, isError = true) {
+    const element = $("msg");
+    element.textContent = message;
+    element.style.color = isError ? "var(--bad)" : "var(--mute)";
+  }
+
+  function setBusy(busy) {
+    $("go").disabled = busy;
+    $("t").disabled = busy;
+
+    document.querySelectorAll(".chip").forEach(button => {
+      button.disabled = busy;
+    });
+
+    $("go").textContent = busy ? "Loading…" : "Explain it";
+  }
+
+  function makeCard(title, kind, body) {
+    const status = kind || KINDS.event;
+
+    return `
+      <div class="check">
+        <div class="ctop">
+          <h3>${escapeHTML(title)}</h3>
+          <span class="pill ${escapeHTML(status[0])}">${escapeHTML(status[1])}</span>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  function eventField(event, key) {
+    const explanation = event.explanation;
+    const value = (
+      explanation && typeof explanation === "object"
+        ? explanation[key]
+        : null
+    ) ?? event[key];
+
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function renderAnalysis(data) {
+    const result = $("result");
+
+    if (!data || typeof data !== "object") {
+      throw new Error("The server returned an empty or invalid response.");
     }
 
-    function stat(label, value, detail = "") {
-      return `<div class="stat"><div class="stat-label">${safe(label)}</div><div class="stat-value">${safe(value)}</div><div class="stat-detail">${safe(detail)}</div></div>`;
+    if (!Array.isArray(data.quarters)) {
+      throw new Error("The server response is missing quarterly financial data.");
     }
 
-    function drawChart(id, rows, key, color, wide = false) {
-      const svg = $(id);
-      const width = wide ? 900 : 520;
-      const height = wide ? 260 : 245;
-      const left = 60, right = 16, top = 18, bottom = 42;
-      const plotW = width - left - right, plotH = height - top - bottom;
-      const values = rows.map(r => r[key] == null ? null : Number(r[key]));
-      const valid = values.filter(v => v != null && Number.isFinite(v));
-      if (!valid.length) {
-        svg.innerHTML = `<text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#69768c" font-size="13">No quarterly data available</text>`;
-        return;
-      }
-      let min = Math.min(0, ...valid), max = Math.max(0, ...valid);
-      if (max === min) max = min + 1;
-      const pad = (max - min) * .12;
-      min -= pad; max += pad;
-      const x = i => left + (rows.length <= 1 ? plotW/2 : i * plotW/(rows.length-1));
-      const y = v => top + (max-v)/(max-min)*plotH;
-      const zeroY = y(0);
-      let out = "";
-      for (let i=0; i<4; i++) {
-        const v = min + (max-min)*i/3;
-        const yy = y(v);
-        out += `<line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" stroke="#e7ebf2" stroke-dasharray="3 5"/>`;
-        out += `<text x="${left-8}" y="${yy+4}" text-anchor="end" font-size="10" fill="#69768c">${axisMoney(v)}</text>`;
-      }
-      if (min < 0 && max > 0) out += `<line x1="${left}" y1="${zeroY}" x2="${width-right}" y2="${zeroY}" stroke="#9aa7ba" stroke-width="1.4"/>`;
-      const points = values.map((v,i) => v == null ? null : [x(i),y(v)]);
-      let path = "";
-      points.forEach((p,i) => {
-        if (!p) return;
-        path += (i === 0 || !points[i-1] ? "M" : "L") + p[0] + " " + p[1] + " ";
-      });
-      if (path) out += `<path d="${path}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
-      points.forEach((p,i) => {
-        if (!p) return;
-        out += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${color}"><title>${safe(rows[i].end)}: ${safe(money(values[i]))}</title></circle>`;
-      });
-      rows.forEach((r,i) => {
-        if (rows.length > 8 && i % 2) return;
-        const label = (r.end || "").slice(0,7);
-        out += `<text x="${x(i)}" y="${height-15}" text-anchor="middle" font-size="${wide?11:10}" fill="#69768c">${safe(label)}</text>`;
-      });
-      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      svg.innerHTML = out;
+    const quarters = data.quarters.map(q => `
+      <tr>
+        <td>${quarterLabel(q.end)}</td>
+        <td>${money(q.sales)}</td>
+        <td class="${signClass(q.salesYoY)}">${percent(q.salesYoY)}</td>
+        <td class="${signClass(q.profit)}">${money(q.profit)}</td>
+        <td>${q.margin == null ? "—" : (Number(q.margin) * 100).toFixed(1) + "%"}</td>
+        <td class="${signClass(q.cash)}">${money(q.cash)}</td>
+      </tr>
+    `).join("");
+
+    const signals = (data.signals || []).map(signal =>
+      makeCard(
+        signal.title || "Financial change",
+        KINDS[signal.kind] || KINDS.event,
+        `<p>${escapeHTML(signal.text || "")}</p>`
+      )
+    ).join("") || '<p class="jargon">No major changes stood out in the reported figures.</p>';
+
+    const events = (data.events || []).map(event => {
+      const what = eventField(event, "whatHappened");
+      const why = eventField(event, "whyItMatters");
+      const impact = eventField(event, "potentialImpact");
+      const uncertainty = eventField(event, "uncertainty");
+      const details = typeof event.details === "string" ? event.details.trim() : "";
+
+      const link = typeof event.url === "string" &&
+        event.url.startsWith("https://www.sec.gov/")
+          ? ` · <a href="${escapeHTML(event.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
+          : "";
+
+      const explanation = `
+        <div class="event-explanation">
+          ${what ? `<p><strong>What happened:</strong> ${escapeHTML(what)}</p>` : ""}
+          ${why ? `<p><strong>Why it matters:</strong> ${escapeHTML(why)}</p>` : ""}
+          ${impact ? `<p><strong>Potential impact:</strong> ${escapeHTML(impact)}</p>` : ""}
+          ${uncertainty ? `<p><strong>What's uncertain:</strong> ${escapeHTML(uncertainty)}</p>` : ""}
+          ${!what && !why && !impact && !uncertainty
+            ? '<p class="jargon">An explanation is not available for this announcement yet.</p>'
+            : ""}
+        </div>
+        ${details ? `
+          <details class="event-details">
+            <summary>Additional filing details</summary>
+            <p>${escapeHTML(details)}</p>
+          </details>
+        ` : ""}
+      `;
+
+      return makeCard(
+        event.title || "Company announcement",
+        KINDS[event.kind] || KINDS.event,
+        `<p class="jargon">${escapeHTML(event.date || "Date unavailable")}${link}</p>${explanation}`
+      );
+    }).join("") || '<p class="jargon">No notable announcements were found in the available filings.</p>';
+
+    const checks = (data.checks || []).map(check => `
+      <div class="check">
+        <div class="ctop">
+          <h3>${escapeHTML(check.title || "Financial check")}</h3>
+          <span class="pill ${escapeHTML(check.status || "na")}">${escapeHTML(LABELS[check.status] || LABELS.na)}</span>
+        </div>
+        <span class="jargon">Technical name: ${escapeHTML(check.jargon || "Not available")}</span>
+        <p>${escapeHTML(check.text || "")}</p>
+      </div>
+    `).join("");
+
+    const risks = (data.risks || []).map(risk =>
+      `<li>${escapeHTML(risk)}</li>`
+    ).join("");
+
+    result.innerHTML = `
+      <div class="head">
+        <h2>${escapeHTML(data.name || "Company")} (${escapeHTML(data.ticker || "")})</h2>
+        <span class="tag">${escapeHTML(data.periodLabel || "")}</span>
+      </div>
+
+      ${data.companyDescription
+        ? `<p class="about">${escapeHTML(data.companyDescription)}</p>`
+        : ""}
+
+      <p class="summary">${escapeHTML(data.summary || "Financial information was returned, but no summary was provided.")}</p>
+
+      <h3 class="sec">Quarter by quarter</h3>
+      <div class="tw">
+        <table class="qt">
+          <thead>
+            <tr>
+              <th>Quarter</th>
+              <th>Sales</th>
+              <th>vs year ago</th>
+              <th>Profit</th>
+              <th>Margin</th>
+              <th>Free cash flow</th>
+            </tr>
+          </thead>
+          <tbody>${quarters || '<tr><td colspan="6">No quarterly figures are available.</td></tr>'}</tbody>
+        </table>
+      </div>
+
+      <h3 class="sec">What changed in the numbers</h3>
+      ${signals}
+
+      <h3 class="sec">Recent company announcements</h3>
+      ${events}
+
+      <p class="note">Announcements are based on company filings with the SEC. Explanations describe why an announcement may matter, not a guaranteed outcome for the stock. They may not include all news, analyst views, or upcoming events.</p>
+
+      <h3 class="sec">Four quick checks (latest quarter)</h3>
+      ${checks || '<p class="jargon">No quick checks were returned.</p>'}
+
+      <div class="risks">
+        <h3>What could go wrong</h3>
+        <ul>${risks || "<li>Risks could not be determined from the available figures.</li>"}</ul>
+      </div>
+
+      <p class="note">Based on public company filings with the SEC. Figures may lag recent events. Education only, not investment advice.</p>
+    `;
+  }
+
+  async function runSearch(tickerOverride) {
+    if ($("go").disabled) return;
+
+    const ticker = String(tickerOverride ?? $("t").value)
+      .trim()
+      .toUpperCase();
+
+    $("t").value = ticker;
+    $("result").replaceChildren();
+    showMessage("");
+
+    if (!ticker) {
+      showMessage("Enter a ticker, like AAPL.");
+      $("t").focus();
+      return;
     }
 
-    function axisMoney(v) {
-      const abs = Math.abs(v), sign = v < 0 ? "-" : "";
-      if (abs >= 1e9) return sign + "$" + (abs/1e9).toFixed(1) + "B";
-      if (abs >= 1e6) return sign + "$" + (abs/1e6).toFixed(0) + "M";
-      if (abs >= 1e3) return sign + "$" + (abs/1e3).toFixed(0) + "K";
-      return sign + "$" + Math.round(abs);
+    if (!/^[A-Z0-9.-]{1,8}$/.test(ticker)) {
+      showMessage("Please enter a valid ticker symbol, like AAPL.");
+      $("t").focus();
+      return;
     }
 
-    function renderQuarters(rows) {
-      $("quarterRows").innerHTML = rows.map(r => `
-        <tr>
-          <td>${safe(r.end)}</td>
-          <td>${safe(money(r.sales))}</td>
-          <td class="${tone(r.salesYoY)}">${safe(percent(r.salesYoY))}</td>
-          <td class="${tone(r.profit)}">${safe(money(r.profit))}</td>
-          <td class="${tone(r.margin)}">${safe(percent(r.margin))}</td>
-          <td class="${tone(r.cash)}">${safe(money(r.cash))}</td>
-        </tr>`).join("");
-    }
+    const result = $("result");
+    const messages = [
+      "Finding the company…",
+      "Reading its quarterly reports…",
+      "Checking recent announcements…",
+      "Preparing the explanation…"
+    ];
 
-    function renderSignals(items) {
-      $("signals").innerHTML = items?.length ? items.map(s => `
-        <article class="signal">
-          <div class="signal-top"><h3>${safe(s.title)}</h3><span class="pill ${safe(s.kind || "event")}">${safe(s.kind || "Note")}</span></div>
-          <p>${safe(s.text)}</p>
-        </article>`).join("") : `<div class="empty">No major changes were detected in the tracked figures, or there is not enough data to compare them.</div>`;
-    }
+    result.innerHTML = `
+      <div class="loading" role="status">
+        <div class="spin" aria-hidden="true"></div>
+        <p id="loadingMessage">${messages[0]}</p>
+        <div class="sk" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+    `;
 
-    function renderChecks(items) {
-      $("checks").innerHTML = (items || []).map(c => `
-        <article class="check">
-          <div class="check-head"><h3>${safe(c.title)}</h3><span class="status ${safe(c.status || "na")}">${safe(c.status || "na")}</span></div>
-          <div class="jargon">${safe(c.jargon || "")}</div>
-          <p>${safe(c.text || "Not enough information to assess this check.")}</p>
-        </article>`).join("");
-    }
+    showMessage("Connecting to Plainvest…", false);
+    setBusy(true);
 
-    function renderRisks(items) {
-      $("risks").innerHTML = (items?.length ? items : ["The available filings do not identify specific risks in a standard format."]).map(r =>
-        `<div class="risk"><p>${safe(r)}</p></div>`).join("");
-    }
+    let messageIndex = 0;
+    const loadingTimer = window.setInterval(() => {
+      messageIndex = Math.min(messageIndex + 1, messages.length - 1);
+      const loadingMessage = $("loadingMessage");
+      if (loadingMessage) loadingMessage.textContent = messages[messageIndex];
+    }, 2500);
 
-    function balanceRows(items) {
-      if (!items?.length) return `<div class="empty">These details were not separately reported in the available SEC data.</div>`;
-      return items.map(item => `
-        <div class="balance-row"><span>${safe(item.label)}</span><strong>${item.value == null ? "Not separately reported" : safe(money(item.value))}</strong></div>`).join("");
-    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 90000);
 
-    function renderBalance(data) {
-      $("balanceDate").textContent = "Reporting date: " + (data?.date || "unavailable") + ". Categories are shown only when a usable SEC figure was found.";
-      const summary = [
-        ["Total assets", data?.totalAssets],
-        ["Total liabilities", data?.totalLiabilities],
-        ["Shareholders' equity", data?.equity],
-        ["Cash and equivalents", data?.cashAndEquivalents]
-      ];
-      $("balanceSummary").innerHTML = summary.map(([label,value]) => stat(label, money(value))).join("");
+    try {
+      const response = await fetch(
+        "/api/analyze?ticker=" + encodeURIComponent(ticker),
+        {
+          method:"GET",
+          headers:{ "Accept":"application/json" },
+          cache:"no-store",
+          signal:controller.signal
+        }
+      );
 
-      const assets = data?.assets || [];
-      const funding = data?.funding || [];
-      $("assetsBoxes").innerHTML = `
-        <details class="balance-box" open><summary>Assets breakdown</summary><div class="balance-content">
-          ${balanceRows(assets)}
-          <div class="balance-row balance-total"><span>Total assets</span><strong>${safe(money(data?.totalAssets))}</strong></div>
-        </div></details>`;
-      $("liabilitiesBoxes").innerHTML = `
-        <details class="balance-box" open><summary>Liabilities and equity</summary><div class="balance-content">
-          ${balanceRows(funding)}
-          <div class="balance-row balance-total"><span>Total liabilities</span><strong>${safe(money(data?.totalLiabilities))}</strong></div>
-          <div class="balance-row balance-total"><span>Shareholders' equity</span><strong>${safe(money(data?.equity))}</strong></div>
-        </div></details>`;
-    }
-
-    function renderEvents(events) {
-      if (!events?.length) {
-        $("events").innerHTML = `<div class="empty">No matching announcements were found in the recent SEC filings, or filings could not be loaded.</div>`;
-        return;
-      }
-      $("events").innerHTML = events.map(e => {
-        const ex = e.explanation;
-        return `<article class="event">
-          <div class="event-date">${safe(dateLabel(e.date))}</div>
-          <div class="event-top"><h3>${safe(e.title || "Company filing")}</h3><span class="pill ${safe(e.kind || "event")}">${safe(e.kind || "event")}</span></div>
-          ${ex ? `<div class="event-explanation">
-            <div><strong>What happened:</strong> ${safe(ex.whatHappened)}</div>
-            <div><strong>Why it matters:</strong> ${safe(ex.whyItMatters)}</div>
-            <div><strong>Possible business impact:</strong> ${safe(ex.potentialImpact)}</div>
-            <div><strong>What remains unclear:</strong> ${safe(ex.uncertainty)}</div>
-          </div>` : `<p style="margin-top:10px">The filing was identified, but there was not enough readable filing text to produce a reliable explanation.</p>`}
-          ${e.url ? `<div style="margin-top:10px"><a href="${safe(e.url)}" target="_blank" rel="noopener noreferrer">Read SEC filing ↗</a></div>` : ""}
-        </article>`;
-      }).join("");
-    }
-
-    function render(data) {
-      const rows = (data.quarters || []).slice(0,8);
-      $("tickerLabel").textContent = data.ticker || "";
-      $("companyName").textContent = data.name || data.ticker || "Company";
-      $("periodLabel").textContent = data.periodLabel || "";
-      $("companyDescription").textContent = data.companyDescription || "A plain-English business description could not be generated from the available SEC text.";
-      $("summaryText").textContent = data.summary || "The latest available financial data is shown below.";
-      const latest = rows[0] || {};
-      $("statGrid").innerHTML = [
-        stat("Latest revenue", money(latest.sales), latest.end || ""),
-        stat("Revenue growth YoY", percent(latest.salesYoY), "Compared with the same quarter last year"),
-        stat("Profit / loss", money(latest.profit), "Latest reported quarter"),
-        stat("Free cash flow", money(latest.cash), "Operating cash flow minus capital spending")
-      ].join("");
-      drawChart("revenueChart", rows.slice().reverse(), "sales", "#1c4bb0");
-      drawChart("profitChart", rows.slice().reverse(), "profit", "#3569db");
-      drawChart("cashChart", rows.slice().reverse(), "cash", "#16845b", true);
-      renderQuarters(rows);
-      renderBalance(data.balanceSheet || {});
-      renderSignals(data.signals || []);
-      renderChecks(data.checks || []);
-      renderEvents(data.events || []);
-      renderRisks(data.risks || []);
-      $("results").style.display = "block";
-    }
-
-    $("searchForm").addEventListener("submit", async event => {
-      event.preventDefault();
-      const ticker = $("tickerInput").value.trim().toUpperCase();
-      if (!ticker) return;
-      $("searchButton").disabled = true;
-      $("searchButton").textContent = "Analyzing…";
-      $("results").style.display = "none";
-      $("message").className = "";
-      $("message").style.display = "none";
-      showMessage("Fetching SEC financial data and preparing the explanation…", "info");
+      const raw = await response.text();
+      let data;
 
       try {
-        const response = await fetch("/api/analyze?ticker=" + encodeURIComponent(ticker), {
-          method: "GET",
-          cache: "no-store",
-          headers: { "Accept": "application/json" }
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || "The company could not be analyzed. Please try again.");
-        render(data);
-        $("message").className = "";
-        $("message").style.display = "none";
-        $("results").scrollIntoView({behavior:"smooth", block:"start"});
-      } catch (error) {
-        showMessage(error.message || "Couldn't reach the server. Please try again.", "error");
-      } finally {
-        $("searchButton").disabled = false;
-        $("searchButton").textContent = "Analyze company";
+        data = JSON.parse(raw);
+      } catch {
+        const detail = raw.trim().slice(0, 250);
+        throw new Error(
+          response.ok
+            ? "The server returned something other than JSON. Check your Vercel deployment and API route."
+            : `Server error (${response.status}). ${detail || "The server returned no details."}`
+        );
       }
+
+      if (!response.ok) {
+        throw new Error(
+          data && typeof data.error === "string"
+            ? data.error
+            : `The server returned error ${response.status}.`
+        );
+      }
+
+      renderAnalysis(data);
+      showMessage("Analysis loaded successfully.", false);
+    } catch (error) {
+      result.replaceChildren();
+
+      let message;
+
+      if (error.name === "AbortError") {
+        message = "The request took too long and timed out. Check the Vercel function logs, then try again.";
+      } else if (error instanceof TypeError) {
+        message = "Could not connect to the Plainvest API. Check your internet connection and Vercel deployment.";
+      } else {
+        message = error.message || "An unexpected error occurred.";
+      }
+
+      showMessage(message);
+      console.error("Plainvest search failed:", error);
+    } finally {
+      window.clearInterval(loadingTimer);
+      window.clearTimeout(timeout);
+      setBusy(false);
+    }
+  }
+
+  function start() {
+    const form = $("searchForm");
+
+    if (!form || !$("t") || !$("go") || !$("result") || !$("msg")) {
+      console.error("Plainvest initialization failed: required page elements are missing.");
+      return;
+    }
+
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      runSearch();
     });
-  </script>
+
+    document.querySelectorAll("[data-t]").forEach(button => {
+      button.addEventListener("click", () => {
+        runSearch(button.dataset.t);
+      });
+    });
+
+    // Make initialization visible instead of silently doing nothing.
+    showMessage("Ready. Enter a US stock ticker to begin.", false);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once:true });
+  } else {
+    start();
+  }
+})();
+</script>
 </body>
 </html>
