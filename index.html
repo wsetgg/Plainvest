@@ -76,6 +76,7 @@ button:disabled{opacity:.6;cursor:wait}
 .event-explanation strong{color:var(--ink)}
 .event-details{margin-top:8px;font-size:14px}
 .event-details summary{color:var(--acc);cursor:pointer}
+.event-details p{margin-top:8px;white-space:pre-line}
 .risks{border-top:1px solid var(--line);padding-top:16px;margin-top:24px}
 .risks h3{font-size:19px;margin-bottom:6px}
 .risks ul{margin:0;padding-left:20px}
@@ -101,7 +102,7 @@ a{color:var(--acc)}
 .qt th:first-child,.qt td:first-child{text-align:left}
 .qt th{color:var(--mute);font-weight:500;font-size:13px;border-top:0}
 
-/* One combined revenue/profit chart */
+/* Combined revenue and profit chart */
 .chart-card{border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0;background:var(--card)}
 .chart-card h3{font-size:20px;margin-bottom:4px}
 .chart-card p{margin:0;color:var(--mute);font-size:14px}
@@ -272,18 +273,6 @@ function setBusy(value) {
   });
 }
 
-function eventField(event, key) {
-  const explanation = event.explanation;
-
-  const value = (
-    explanation && typeof explanation === 'object'
-      ? explanation[key]
-      : null
-  ) ?? event[key];
-
-  return typeof value === 'string' ? value.trim() : '';
-}
-
 function shortMoney(value) {
   if (value == null || !Number.isFinite(Number(value))) return '–';
 
@@ -298,13 +287,6 @@ function shortMoney(value) {
   return prefix + '$' + Math.round(abs).toLocaleString('en-US');
 }
 
-/*
- * Combined chart:
- * - Revenue is displayed as bars using the left scale.
- * - Profit/loss is displayed as a line using the right scale.
- * - Profit has its own zero baseline, so losses stay below zero.
- * - Each point/bar has a native tooltip with its actual value.
- */
 function combinedChartSvg(quarters) {
   const W = 800;
   const H = 350;
@@ -360,9 +342,8 @@ function combinedChartSvg(quarters) {
   const revenueZeroY = revenueY(0);
   const profitZeroY = profitY(0);
 
-  let svg = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Combined quarterly revenue bars and net profit or loss line. Revenue uses the left axis; profit and loss use the right axis.">`;
+  let svg = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Combined quarterly revenue bars and net profit or loss line. The newest quarter appears first. Revenue uses the left axis; profit and loss use the right axis.">`;
 
-  // Horizontal gridlines are tied to the revenue scale.
   for (let i = 0; i <= 4; i++) {
     const value = revenueMax * i / 4;
     const y = revenueY(value);
@@ -371,11 +352,10 @@ function combinedChartSvg(quarters) {
     svg += `<text class="chart-label" x="${L-8}" y="${(y+4).toFixed(2)}" text-anchor="end">${esc(shortMoney(value))}</text>`;
   }
 
-  // Label the two axes to make the different scales explicit.
   svg += `<text class="chart-label" x="${L}" y="13" text-anchor="start">Revenue</text>`;
   svg += `<text class="chart-label" x="${W-R}" y="13" text-anchor="end">Profit / loss</text>`;
 
-  // Revenue bars use the left axis.
+  // Quarters are already sorted newest first.
   quarters.forEach((quarter, index) => {
     const value = revenue[index];
     const center = L + slot * (index + 0.5);
@@ -389,11 +369,9 @@ function combinedChartSvg(quarters) {
     }
   });
 
-  // Profit's zero line is positioned using the right-axis scale.
   svg += `<line class="chart-zero" x1="${L}" y1="${profitZeroY.toFixed(2)}" x2="${W-R}" y2="${profitZeroY.toFixed(2)}"/>`;
   svg += `<text class="chart-label" x="${W-R+8}" y="${(profitZeroY+4).toFixed(2)}" text-anchor="start">$0</text>`;
 
-  // Right-axis labels for profit/loss.
   for (let i = 0; i <= 4; i++) {
     const value = profitDomainMax -
       (profitDomainMax - profitDomainMin) * i / 4;
@@ -402,8 +380,6 @@ function combinedChartSvg(quarters) {
     svg += `<text class="chart-label" x="${W-R+8}" y="${(y+4).toFixed(2)}" text-anchor="start">${esc(shortMoney(value))}</text>`;
   }
 
-  // Draw the profit line as separate segments so missing quarters do not
-  // create false connections across unavailable data.
   let segment = [];
 
   const drawSegment = points => {
@@ -433,19 +409,16 @@ function combinedChartSvg(quarters) {
       return;
     }
 
-    const point = {
+    segment.push({
       x: L + slot * (index + 0.5),
       y: profitY(value),
       value,
       label: quarterName(quarter.end)
-    };
-
-    segment.push(point);
+    });
   });
 
   svg += drawSegment(segment);
 
-  // Quarter labels follow the same oldest-to-newest order as the table.
   quarters.forEach((quarter, index) => {
     const center = L + slot * (index + 0.5);
     const label = validDate(quarter.end)
@@ -463,7 +436,6 @@ function combinedChartSvg(quarters) {
 }
 
 function renderBalance(balance) {
-  // Always display the section. A missing field should not hide the sheet.
   const sheet = balance && typeof balance === 'object' ? balance : {};
 
   const rows = items => {
@@ -502,25 +474,275 @@ function renderBalance(balance) {
     <p class="note">The listed categories may not include every line item on the company’s balance sheet. Figures are shown only when supported by reported data.</p>`;
 }
 
+/*
+ * Convert the backend's possible announcement response formats into
+ * one consistent list.
+ *
+ * Supports:
+ * - events: [{ title, date, explanation: {...} }]
+ * - eventExplanations: [{ title, date, whatHappened, whyItMatters, ... }]
+ * - eventExplanations: [{ title, explanation: {...} }]
+ * - eventExplanations: ["Plain-text explanation", ...]
+ * - eventExplanations: { events: [...] }
+ */
+function normalizeEvents(data) {
+  const rawEvents = Array.isArray(data.events) ? data.events : [];
+
+  let rawExplanations = data.eventExplanations;
+
+  if (rawExplanations && !Array.isArray(rawExplanations) &&
+      typeof rawExplanations === 'object') {
+    if (Array.isArray(rawExplanations.events)) {
+      rawExplanations = rawExplanations.events;
+    } else {
+      rawExplanations = Object.values(rawExplanations);
+    }
+  }
+
+  if (!Array.isArray(rawExplanations)) {
+    rawExplanations = [];
+  }
+
+  const identity = item => {
+    if (!item || typeof item !== 'object') return '';
+
+    const value = item.accessionNumber ||
+      item.accession ||
+      item.url ||
+      item.title ||
+      item.eventTitle ||
+      '';
+
+    return String(value).trim().toLowerCase();
+  };
+
+  const usedExplanations = new Set();
+
+  const merged = rawEvents.map((event, index) => {
+    const eventId = identity(event);
+
+    let explanationIndex = -1;
+
+    if (eventId) {
+      explanationIndex = rawExplanations.findIndex((candidate, i) =>
+        !usedExplanations.has(i) && identity(candidate) === eventId
+      );
+    }
+
+    // If there is no exact match, the backend may return explanations
+    // in the same order as the events.
+    if (explanationIndex < 0 && rawExplanations[index] != null &&
+        !usedExplanations.has(index)) {
+      explanationIndex = index;
+    }
+
+    const candidate = explanationIndex >= 0
+      ? rawExplanations[explanationIndex]
+      : null;
+
+    if (explanationIndex >= 0) {
+      usedExplanations.add(explanationIndex);
+    }
+
+    if (typeof candidate === 'string') {
+      return {
+        ...event,
+        explanation: event.explanation || {
+          plainEnglishExplanation: candidate
+        }
+      };
+    }
+
+    if (candidate && typeof candidate === 'object') {
+      const nested = candidate.explanation &&
+        typeof candidate.explanation === 'object'
+          ? candidate.explanation
+          : {};
+
+      return {
+        ...event,
+        ...candidate,
+        explanation: {
+          ...(event.explanation && typeof event.explanation === 'object'
+            ? event.explanation
+            : {}),
+          ...nested,
+          ...candidate
+        }
+      };
+    }
+
+    return event;
+  });
+
+  // Some backend versions may return explanations without a separate
+  // events array. Display those explanations rather than dropping them.
+  if (!merged.length) {
+    return rawExplanations.map((item, index) => {
+      if (typeof item === 'string') {
+        return {
+          title: `Announcement ${index + 1}`,
+          explanation: { plainEnglishExplanation: item }
+        };
+      }
+
+      if (!item || typeof item !== 'object') return null;
+
+      return {
+        ...item,
+        title: item.title || item.eventTitle || item.form || `Announcement ${index + 1}`,
+        explanation: item.explanation || item
+      };
+    }).filter(Boolean);
+  }
+
+  // Include any remaining explanations that did not match an event.
+  rawExplanations.forEach((item, index) => {
+    if (usedExplanations.has(index) || item == null) return;
+
+    if (typeof item === 'string') {
+      merged.push({
+        title: `Additional announcement explanation ${index + 1}`,
+        explanation: { plainEnglishExplanation: item }
+      });
+      return;
+    }
+
+    if (typeof item === 'object') {
+      merged.push({
+        ...item,
+        title: item.title || item.eventTitle || `Additional announcement ${index + 1}`,
+        explanation: item.explanation || item
+      });
+    }
+  });
+
+  return merged;
+}
+
+function eventField(event, key) {
+  const explanation = event && event.explanation;
+
+  const aliases = {
+    whatHappened: ['whatHappened', 'what_happened', 'eventSummary'],
+    whyItMatters: ['whyItMatters', 'why_it_matters', 'significance'],
+    potentialImpact: ['potentialImpact', 'potential_impact', 'impact'],
+    uncertainty: ['uncertainty', 'whatIsUncertain', 'what_is_uncertain'],
+    plainEnglishExplanation: [
+      'plainEnglishExplanation',
+      'plain_english_explanation',
+      'explanationText',
+      'overallExplanation',
+      'summary'
+    ]
+  };
+
+  const keys = aliases[key] || [key];
+  const sources = [];
+
+  if (explanation && typeof explanation === 'object') {
+    sources.push(explanation);
+  }
+
+  if (event && typeof event === 'object') {
+    sources.push(event);
+  }
+
+  for (const source of sources) {
+    for (const candidateKey of keys) {
+      const value = source[candidateKey];
+
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+  }
+
+  // A plain-text explanation may be stored directly in event.explanation.
+  if (key === 'plainEnglishExplanation' &&
+      typeof explanation === 'string' && explanation.trim()) {
+    return explanation.trim();
+  }
+
+  return '';
+}
+
+function renderEvents(data) {
+  const events = normalizeEvents(data);
+
+  if (!events.length) {
+    return '<p class="jargon">No notable SEC announcements were found in the available results. This does not mean the company had no news; Plainvest currently focuses on SEC filings.</p>';
+  }
+
+  return events.map(event => {
+    const what = eventField(event, 'whatHappened');
+    const why = eventField(event, 'whyItMatters');
+    const impact = eventField(event, 'potentialImpact');
+    const uncertain = eventField(event, 'uncertainty');
+    const plainEnglish = eventField(event, 'plainEnglishExplanation');
+
+    const details = typeof event.details === 'string'
+      ? event.details.trim()
+      : typeof event.filingText === 'string'
+        ? event.filingText.trim()
+        : '';
+
+    const link = typeof event.url === 'string' &&
+      event.url.startsWith('https://www.sec.gov/')
+        ? ` · <a href="${esc(event.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
+        : '';
+
+    const hasStructuredExplanation = Boolean(what || why || impact || uncertain);
+
+    const explanation = `
+      <div class="event-explanation">
+        ${what ? `<p><strong>What happened:</strong> ${esc(what)}</p>` : ''}
+        ${why ? `<p><strong>Why it matters:</strong> ${esc(why)}</p>` : ''}
+        ${impact ? `<p><strong>Potential impact:</strong> ${esc(impact)}</p>` : ''}
+        ${uncertain ? `<p><strong>What’s uncertain:</strong> ${esc(uncertain)}</p>` : ''}
+        ${!hasStructuredExplanation && plainEnglish
+          ? `<p><strong>Plain-English explanation:</strong> ${esc(plainEnglish)}</p>`
+          : ''}
+        ${!hasStructuredExplanation && !plainEnglish
+          ? '<p class="jargon">The filing was identified, but Plainvest did not receive a usable explanation for it. The filing link below can be used to check the original source.</p>'
+          : ''}
+      </div>
+      ${details
+        ? `<details class="event-details"><summary>Additional filing details</summary><p>${esc(details)}</p></details>`
+        : ''}`;
+
+    return card(
+      event.title || event.eventTitle || 'Company announcement',
+      KIND[event.kind] || KIND.event,
+      `<p class="jargon">${esc(event.date || event.filedDate || '')}${link}</p>${explanation}`
+    );
+  }).join('');
+}
+
 function render(data) {
-  // Validate dates, remove duplicate periods, and sort a copy oldest-first.
-  // This does not mutate the API data used for latest-quarter calculations.
+  /*
+   * Newest first:
+   * 1. Validate quarter-end dates.
+   * 2. Remove duplicate quarter-end dates.
+   * 3. Sort descending by date.
+   * 4. Keep the latest eight quarters.
+   *
+   * The chart and table use this same array, so their order stays aligned.
+   */
   const sourceQuarters = Array.isArray(data.quarters) ? data.quarters : [];
   const byDate = new Map();
 
   for (const quarter of sourceQuarters) {
     if (!quarter || !validDate(quarter.end)) continue;
 
-    // Keep the first occurrence for a reporting date. The API sends its
-    // quarterly data newest-first, so this retains the newest entry.
     if (!byDate.has(quarter.end)) {
       byDate.set(quarter.end, quarter);
     }
   }
 
   const quarters = [...byDate.values()]
-    .sort((a, b) => a.end.localeCompare(b.end))
-    .slice(-8);
+    .sort((a, b) => b.end.localeCompare(a.end))
+    .slice(0, 8);
 
   const table = quarters.map(quarter =>
     `<tr>
@@ -544,40 +766,7 @@ function render(data) {
   ).join('') ||
     '<p class="jargon">No major changes stood out in the available numbers.</p>';
 
-  const events = (data.events || []).map(event => {
-    const what = eventField(event, 'whatHappened');
-    const why = eventField(event, 'whyItMatters');
-    const impact = eventField(event, 'potentialImpact');
-    const uncertain = eventField(event, 'uncertainty');
-    const details = typeof event.details === 'string'
-      ? event.details.trim()
-      : '';
-
-    const link = event.url && event.url.startsWith('https://www.sec.gov/')
-      ? ` · <a href="${esc(event.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
-      : '';
-
-    const explanation = `
-      <div class="event-explanation">
-        ${what ? `<p><strong>What happened:</strong> ${esc(what)}</p>` : ''}
-        ${why ? `<p><strong>Why it matters:</strong> ${esc(why)}</p>` : ''}
-        ${impact ? `<p><strong>Potential impact:</strong> ${esc(impact)}</p>` : ''}
-        ${uncertain ? `<p><strong>What’s uncertain:</strong> ${esc(uncertain)}</p>` : ''}
-        ${!what && !why && !impact && !uncertain
-          ? '<p class="jargon">An explanation is not available for this announcement yet.</p>'
-          : ''}
-      </div>
-      ${details
-        ? `<details class="event-details"><summary>Additional filing details</summary><p>${esc(details)}</p></details>`
-        : ''}`;
-
-    return card(
-      event.title || 'Company announcement',
-      KIND[event.kind] || KIND.event,
-      `<p class="jargon">${esc(event.date || '')}${link}</p>${explanation}`
-    );
-  }).join('') ||
-    '<p class="jargon">No notable SEC announcements were found in the past year.</p>';
+  const events = renderEvents(data);
 
   const checks = (data.checks || []).map(check =>
     `<div class="check">
@@ -616,7 +805,7 @@ function render(data) {
     <h3 class="sec">Revenue and profit · latest ${quarters.length} quarters</h3>
     <div class="chart-card">
       <h3>Quarterly revenue and profit / loss</h3>
-      <p>Revenue uses the left axis; profit and loss use the right axis. Hover over a bar or point for the reported value.</p>
+      <p>Newest quarter first. Revenue uses the left axis; profit and loss use the right axis. Hover over a bar or point for the reported value.</p>
       ${combinedChartSvg(quarters)}
       <div class="legend">
         <span><i class="dot"></i>Revenue bars</span>
@@ -626,7 +815,7 @@ function render(data) {
       <p class="chart-tooltip">The dashed line marks zero for profit/loss. Negative values remain below that line.</p>
     </div>
 
-    <h3 class="sec">Quarter-by-quarter figures</h3>
+    <h3 class="sec">Quarter-by-quarter figures · newest first</h3>
     <div class="tw">
       <table class="qt">
         <thead><tr><th>Quarter</th><th>Revenue</th><th>vs year ago</th><th>Profit / loss</th><th>Margin</th><th>Free cash flow</th></tr></thead>
@@ -737,7 +926,9 @@ async function run(ticker) {
     $('msg').textContent =
       error?.name === 'TimeoutError'
         ? 'The request took too long. The SEC or an AI service may be slow; please try again.'
-        : error?.message || 'Could not complete the request. Check your connection and try again.';
+        : error?.name === 'AbortError'
+          ? 'The request was interrupted before it finished. Please try again.'
+          : error?.message || 'Could not complete the request. Check your connection and try again.';
 
     console.error('Plainvest search error:', error);
   } finally {
