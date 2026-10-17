@@ -1,1322 +1,552 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f5f7fb">
-<meta name="description" content="Understand public companies, financial results, and business risks in plain English with Plainvest.">
-<title>Plainvest — Stocks explained in plain English</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-<style>
-:root {
-  color-scheme: light;
-
-  --bg: #f5f7fb;
-  --card: #ffffff;
-  --card-soft: #f8faff;
-  --ink: #17243b;
-  --mute: #64748b;
-  --line: #e1e7f0;
-
-  --acc: #1c4bb0;
-  --acc-ink: #ffffff;
-  --acc-light: #edf3ff;
-  --acc-hover: #163e96;
-
-  --revenue: #1c4bb0;
-  --profit: #3569db;
-
-  --good: #19734a;
-  --goodbg: #e8f6ee;
-  --warn: #95620a;
-  --warnbg: #fff5df;
-  --bad: #a02c42;
-  --badbg: #fff0f2;
-
-  --radius: 18px;
-  --shadow: 0 8px 28px rgba(29, 53, 91, .045);
-  --shadow-hover: 0 12px 34px rgba(29, 53, 91, .075);
-
-  box-sizing: border-box;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-  scroll-padding-top: 24px;
-}
-
-body {
-  margin: 0;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(53,105,219,.055), transparent 42%),
-    var(--bg);
-  color: var(--ink);
-  font: 16px/1.65 "DM Sans", system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-button, input {
-  font: inherit;
-}
-
-button {
-  -webkit-tap-highlight-color: transparent;
-}
-
-.wrap {
-  width: 100%;
-  max-width: 940px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-h1, h2, h3 {
-  font-family: "Bricolage Grotesque", "DM Sans", system-ui, sans-serif;
-  line-height: 1.2;
-  margin: 0;
-  letter-spacing: -.025em;
-}
-
-nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 22px 0;
-  border-bottom: 1px solid rgba(225,231,240,.8);
-}
-
-.logo {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink);
-  font: 700 24px "Bricolage Grotesque", sans-serif;
-  letter-spacing: -.8px;
-}
-
-.logo::before {
-  content: "P";
-  display: grid;
-  place-items: center;
-  width: 35px;
-  height: 35px;
-  color: #fff;
-  background: linear-gradient(145deg, #3569db, #1c4bb0);
-  border-radius: 11px;
-  font-size: 22px;
-  box-shadow: 0 4px 10px rgba(28,75,176,.2);
-}
-
-.nav-note {
-  color: var(--acc);
-  background: var(--acc-light);
-  border: 1px solid #dce7ff;
-  padding: 5px 11px;
-  border-radius: 99px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .04em;
-}
-
-header.hero {
-  padding: 60px 0 36px;
-}
-
-h1 {
-  font-size: clamp(36px, 7vw, 58px);
-  letter-spacing: -.045em;
-  line-height: 1.08;
-  max-width: 680px;
-}
-
-.sub {
-  color: var(--mute);
-  max-width: 590px;
-  margin: 20px 0 34px;
-  font-size: 17px;
-  line-height: 1.8;
-}
-
-.demo {
-  position: relative;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 26px;
-  box-shadow: var(--shadow);
-}
-
-.demo::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  left: 28px;
-  right: 28px;
-  height: 3px;
-  border-radius: 0 0 5px 5px;
-  background: linear-gradient(90deg, var(--revenue), var(--profit));
-}
-
-.demo label {
-  display: block;
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 11px;
-}
-
-.row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-input {
-  flex: 1;
-  min-width: 140px;
-  width: 100%;
-  font: inherit;
-  font-size: 16px;
-  padding: 13px 15px;
-  border: 1px solid #d9e1ed;
-  border-radius: 11px;
-  background: #fbfcff;
-  color: var(--ink);
-  text-transform: uppercase;
-  transition: border-color .18s, box-shadow .18s, background .18s;
-}
-
-input::placeholder {
-  color: #9aa8ba;
-  text-transform: none;
-}
-
-input:hover {
-  border-color: #b9c9e2;
-}
-
-input:focus {
-  outline: none;
-  border-color: var(--acc);
-  background: #fff;
-  box-shadow: 0 0 0 4px rgba(28,75,176,.09);
-}
-
-button {
-  font: inherit;
-  font-weight: 700;
-  border: 0;
-  border-radius: 11px;
-  padding: 13px 21px;
-  background: var(--acc);
-  color: var(--acc-ink);
-  cursor: pointer;
-  transition: background .18s, transform .18s, box-shadow .18s;
-}
-
-#go {
-  box-shadow: 0 4px 12px rgba(28,75,176,.16);
-}
-
-#go:hover {
-  background: var(--acc-hover);
-  box-shadow: 0 6px 16px rgba(28,75,176,.2);
-  transform: translateY(-1px);
-}
-
-button:active {
-  transform: translateY(0);
-}
-
-button.chip {
-  background: #fff;
-  color: #52647d;
-  border: 1px solid #e0e7f1;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 8px;
-}
-
-button.chip:hover,
-button.chip[aria-pressed="true"] {
-  background: var(--acc-light);
-  border-color: #b9cdf7;
-  color: var(--acc);
-}
-
-button:focus-visible,
-input:focus-visible {
-  outline: 3px solid rgba(53,105,219,.45);
-  outline-offset: 3px;
-}
-
-button:disabled {
-  opacity: .6;
-  cursor: wait;
-  transform: none;
-}
-
-.chips {
-  margin-top: 15px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  color: var(--mute);
-  font-size: 13px;
-}
-
-#msg {
-  margin: 12px 0 0;
-  color: var(--bad);
-  font-size: 14px;
-  min-height: 1px;
-}
-
-#result {
-  margin-top: 24px;
-}
-
-.head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: baseline;
-  margin-bottom: 6px;
-}
-
-.head h2 {
-  font-size: clamp(25px, 4vw, 32px);
-}
-
-.tag {
-  color: var(--mute);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.summary {
-  font-size: 17px;
-  line-height: 1.8;
-  margin: 18px 0 20px;
-  padding: 15px 18px;
-  background: var(--acc-light);
-  border: 1px solid #dfe9ff;
-  border-left: 4px solid var(--acc);
-  border-radius: 0 12px 12px 0;
-}
-
-.about {
-  font-size: 15px;
-  line-height: 1.8;
-  color: var(--mute);
-  margin: 12px 0 22px;
-}
-
-.sec {
-  font-size: 22px;
-  margin: 32px 0 13px;
-  letter-spacing: -.025em;
-}
-
-.check {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  padding: 17px 0;
-  border-top: 1px solid var(--line);
-}
-
-.ctop {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.ctop h3 {
-  font-size: 17px;
-}
-
-.jargon {
-  color: var(--mute);
-  font-size: 13px;
-}
-
-.pill {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 99px;
-  white-space: nowrap;
-}
-
-.na {
-  background: #edf1f6;
-  color: #617187;
-}
-
-.good {
-  background: var(--goodbg);
-  color: var(--good);
-}
-
-.warn {
-  background: var(--warnbg);
-  color: var(--warn);
-}
-
-.bad {
-  background: var(--badbg);
-  color: var(--bad);
-}
-
-.check p {
-  margin: 0;
-}
-
-.event-explanation {
-  margin-top: 9px;
-  display: grid;
-  gap: 9px;
-}
-
-.event-explanation p {
-  margin: 0;
-}
-
-.event-explanation strong {
-  color: var(--ink);
-}
-
-.event-details {
-  margin-top: 10px;
-  font-size: 14px;
-}
-
-.event-details summary {
-  color: var(--acc);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.risks {
-  border: 1px solid #f0dfe2;
-  background: #fffafb;
-  border-radius: 14px;
-  padding: 18px 20px;
-  margin-top: 24px;
-}
-
-.risks h3 {
-  font-size: 18px;
-  margin-bottom: 8px;
-}
-
-.risks ul {
-  margin: 0;
-  padding-left: 21px;
-}
-
-.risks li {
-  padding: 3px 0;
-}
-
-.note {
-  margin-top: 18px;
-  font-size: 13px;
-  line-height: 1.75;
-  color: var(--mute);
-  background: #f0f4fa;
-  border: 1px solid #e4eaf3;
-  border-radius: 11px;
-  padding: 13px 15px;
-}
-
-section.how {
-  padding: 52px 0 26px;
-}
-
-section.how h2 {
-  font-size: 29px;
-  margin-bottom: 22px;
-}
-
-.cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 14px;
-}
-
-.cols > div {
-  background: rgba(255,255,255,.8);
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  padding: 20px;
-  transition: box-shadow .2s, transform .2s;
-}
-
-.cols > div:hover {
-  box-shadow: var(--shadow-hover);
-  transform: translateY(-2px);
-}
-
-.cols h3 {
-  font-size: 17px;
-  margin-bottom: 8px;
-}
-
-.cols p {
-  margin: 0;
-  color: var(--mute);
-  font-size: 14px;
-  line-height: 1.75;
-}
-
-footer {
-  padding: 28px 0 44px;
-  color: var(--mute);
-  font-size: 13px;
-  line-height: 1.8;
-  border-top: 1px solid var(--line);
-  margin-top: 36px;
-}
-
-.tw {
-  overflow-x: auto;
-  max-width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--card);
-}
-
-.qt {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.qt th,
-.qt td {
-  text-align: right;
-  padding: 11px 13px;
-  border-top: 1px solid var(--line);
-}
-
-.qt th:first-child,
-.qt td:first-child {
-  text-align: left;
-}
-
-.qt th {
-  color: var(--mute);
-  background: #f7f9fd;
-  font-weight: 700;
-  font-size: 12px;
-  border-top: 0;
-}
-
-.qt tbody tr:hover {
-  background: #f7f9ff;
-}
-
-/* Negative figures in tables use blue, not red. */
-.pos,
-.neg {
-  color: var(--profit);
-  font-weight: 600;
-}
-
-a {
-  color: var(--acc);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-a:hover {
-  color: var(--acc-hover);
-}
-
-/* Quarterly revenue and profit chart */
-.chart-card {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--card);
-  padding: 20px;
-  margin: 14px 0 24px;
-  overflow: hidden;
-  box-shadow: var(--shadow);
-}
-
-.chart-legend {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: var(--mute);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.legend-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.revenue-dot {
-  background: #1c4bb0;
-}
-
-.profit-dot {
-  background: #3569db;
-}
-
-/* Negative profit uses the exact same blue as positive profit. */
-.loss-dot {
-  background: #3569db;
-}
-
-.chart-scroll {
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #c5d2e5 transparent;
-}
-
-.quarter-chart {
-  display: block;
-  width: 100%;
-  min-width: 320px;
-  height: auto;
-  overflow: visible;
-}
-
-.chart-label {
-  fill: var(--mute);
-  font-family: "DM Sans", sans-serif;
-  font-size: 11px;
-}
-
-.chart-grid {
-  stroke: #e8edf5;
-  stroke-width: 1;
-}
-
-.chart-zero {
-  stroke: #9aaac0;
-  stroke-width: 1.2;
-  stroke-dasharray: 4 4;
-}
-
-.chart-empty {
-  color: var(--mute);
-  font-size: 14px;
-  padding: 18px 0;
-}
-
-.chart-tooltip {
-  margin-top: 13px;
-  color: var(--mute);
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.loading {
-  padding: 12px 0;
-}
-
-.loading p {
-  margin: 10px 0;
-  color: var(--mute);
-  font-size: 14px;
-}
-
-.spin {
-  width: 28px;
-  height: 28px;
-  border: 3px solid #e2e9f5;
-  border-top-color: var(--acc);
-  border-radius: 50%;
-}
-
-.sk i {
-  display: block;
-  height: 13px;
-  border-radius: 7px;
-  background: #e9eef6;
-  margin: 11px 0;
-}
-
-.sk i:nth-child(2) {
-  width: 80%;
-}
-
-.sk i:nth-child(3) {
-  width: 60%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  #result > * {
-    animation: fade-in .25s ease-out;
-  }
-
-  .spin {
-    animation: spin .8s linear infinite;
-  }
-
-  .sk i {
-    animation: pulse 1.2s ease-in-out infinite alternate;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes pulse {
-    from { opacity: .4; }
-    to { opacity: 1; }
-  }
-
-  @keyframes fade-in {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-}
-
-@media (max-width: 600px) {
-  .wrap {
-    padding: 0 16px;
-  }
-
-  nav {
-    padding: 17px 0;
-  }
-
-  header.hero {
-    padding: 38px 0 24px;
-  }
-
-  h1 {
-    font-size: clamp(34px, 9vw, 46px);
-  }
-
-  .sub {
-    font-size: 15px;
-    margin: 15px 0 25px;
-  }
-
-  .demo {
-    padding: 20px 16px;
-    border-radius: 17px;
-  }
-
-  .row {
-    gap: 9px;
-  }
-
-  .row input {
-    flex-basis: 100%;
-  }
-
-  #go {
-    width: 100%;
-  }
-
-  .chart-card {
-    padding: 13px 10px;
-    border-radius: 14px;
-  }
-
-  .chart-legend {
-    gap: 13px;
-  }
-
-  .head h2 {
-    font-size: 24px;
-  }
-
-  .sec {
-    font-size: 20px;
-    margin-top: 28px;
-  }
-
-  .summary {
-    font-size: 15px;
-    padding: 13px;
-  }
-
-  section.how {
-    padding-top: 38px;
-  }
-
-  .cols {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .cols > div {
-    padding: 17px;
-  }
-
-  .qt th,
-  .qt td {
-    padding: 10px;
-  }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f9fc">
+  <title>Plainvest — Stocks explained in plain English</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f7f9fc;
+      --card: #ffffff;
+      --ink: #14213a;
+      --muted: #69768c;
+      --line: #e5eaf2;
+      --blue: #1c4bb0;
+      --profit: #3569db;
+      --pale: #edf3ff;
+      --green: #16845b;
+      --green-bg: #e9f7f0;
+      --red: #c04444;
+      --red-bg: #fff0ef;
+      --amber: #986516;
+      --amber-bg: #fff5df;
+      --shadow: 0 10px 35px rgba(23, 45, 82, .045);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "DM Sans", sans-serif;
+      line-height: 1.55;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .wrap { width: min(1120px, calc(100% - 32px)); margin: auto; }
+    header {
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.88);
+    }
+    .nav {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .brand {
+      font-family: "Bricolage Grotesque", sans-serif;
+      font-size: 27px;
+      font-weight: 800;
+      letter-spacing: -1.2px;
+    }
+    .brand span { color: var(--blue); }
+    .nav-note { color: var(--muted); font-size: 13px; }
+    .hero { padding: 48px 0 26px; }
+    .eyebrow {
+      color: var(--blue);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { font-family: "Bricolage Grotesque", sans-serif; letter-spacing: -.45px; }
+    h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.05; margin: 12px 0; }
+    .hero p { max-width: 650px; color: var(--muted); margin-bottom: 24px; }
+    .search {
+      display: flex;
+      gap: 10px;
+      max-width: 560px;
+    }
+    .search input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid #dbe2ed;
+      border-radius: 13px;
+      padding: 14px 16px;
+      background: white;
+      outline: none;
+    }
+    .search input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px #1c4bb018; }
+    .primary {
+      background: var(--blue);
+      color: white;
+      border: 0;
+      border-radius: 13px;
+      padding: 13px 20px;
+      font-weight: 700;
+    }
+    .primary:disabled { opacity: .6; cursor: wait; }
+    .limit-note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+    #message { display: none; margin: 16px 0; padding: 13px 15px; border-radius: 12px; }
+    #message.error { display: block; color: var(--red); background: var(--red-bg); }
+    #message.info { display: block; color: var(--blue); background: var(--pale); }
+    #results { display: none; padding: 12px 0 60px; }
+    .company-head { margin: 12px 0 22px; }
+    .company-name { font-size: clamp(28px, 4vw, 38px); margin: 0; }
+    .ticker-label { color: var(--blue); font-size: 13px; font-weight: 700; }
+    .period { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 23px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+      min-width: 0;
+    }
+    .card h2 { font-size: 21px; margin-bottom: 5px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 17px; }
+    .description { font-size: 15px; color: #34435b; margin: 10px 0 0; }
+    .summary { font-size: 15px; color: #34435b; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+    .stat {
+      background: #f8faff;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 15px;
+      min-width: 0;
+    }
+    .stat-label { font-size: 12px; color: var(--muted); }
+    .stat-value { font-family: "Bricolage Grotesque", sans-serif; font-size: clamp(19px,2.5vw,26px); font-weight: 700; overflow-wrap: anywhere; margin-top: 4px; }
+    .stat-detail { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .two-col { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+    .chart-wrap { width: 100%; overflow: hidden; }
+    .chart { display: block; width: 100%; height: auto; overflow: visible; }
+    .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 9px; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+    th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+    td:first-child { font-weight: 700; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .neutral { color: var(--muted); }
+    .signal-list, .event-list, .risk-list { display: grid; gap: 11px; }
+    .signal, .event, .risk {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+    }
+    .signal-top, .event-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .signal h3, .event h3 { font-size: 16px; margin: 0 0 5px; }
+    .signal p, .event p, .risk p { margin: 0; font-size: 13px; color: #4f5d72; }
+    .pill { display: inline-block; flex: 0 0 auto; border-radius: 100px; padding: 4px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .pill.positive, .status.good { color: var(--green); background: var(--green-bg); }
+    .pill.negative, .status.bad { color: var(--red); background: var(--red-bg); }
+    .pill.watch, .status.warn { color: var(--amber); background: var(--amber-bg); }
+    .pill.event, .status.na { color: var(--muted); background: #eef1f6; }
+    .checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+    .check { border: 1px solid var(--line); border-radius: 15px; padding: 16px; }
+    .check-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .check h3 { margin: 0; font-size: 17px; }
+    .status { border-radius: 100px; padding: 4px 9px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .check .jargon { color: var(--muted); font-size: 11px; margin: 7px 0; }
+    .check p { color: #4f5d72; font-size: 13px; margin: 0; }
+    .balance-groups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+    details.balance-box { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    details.balance-box summary { cursor: pointer; padding: 15px; font-weight: 700; background: #f8faff; list-style-position: inside; }
+    .balance-content { padding: 4px 15px 12px; }
+    .balance-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .balance-row:last-child { border-bottom: 0; }
+    .balance-row span:first-child { color: #536178; }
+    .balance-row strong { text-align: right; overflow-wrap: anywhere; }
+    .balance-total { border-top: 1px solid var(--line); font-weight: 700; }
+    .event-date { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+    .event a, .source-link { color: var(--blue); text-decoration: none; font-size: 12px; font-weight: 700; }
+    .event a:hover, .source-link:hover { text-decoration: underline; }
+    .event-explanation { display: grid; gap: 8px; margin-top: 12px; }
+    .event-explanation div { font-size: 13px; color: #4f5d72; }
+    .event-explanation strong { color: var(--ink); }
+    .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+    footer { border-top: 1px solid var(--line); padding: 22px 0 32px; color: var(--muted); font-size: 12px; }
+    .disclaimer { max-width: 820px; }
+    @media (max-width: 720px) {
+      .hero { padding-top: 34px; }
+      .stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .two-col, .balance-groups { grid-template-columns: 1fr; gap: 0; }
+      .checks { grid-template-columns: 1fr; }
+      .card { padding: 18px; border-radius: 16px; }
+      .nav-note { display: none; }
+      .search { align-items: stretch; }
+      .search .primary { padding: 12px 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  </style>
 </head>
-
 <body>
-<div class="wrap">
-
-<nav>
-  <span class="logo">Plainvest</span>
-  <span class="nav-note">BETA</span>
-</nav>
-
-<header class="hero">
-  <h1>Understand a stock before you buy it.</h1>
-  <p class="sub">
-    Type a ticker. Get a plain-English read on how the company makes money,
-    whether it's profitable, how much it owes, and what could go wrong.
-    No finance degree needed.
-  </p>
-
-  <div class="demo">
-    <label for="t">Look up a US-listed company</label>
-
-    <div class="row">
-      <input id="t" maxlength="6" placeholder="e.g. AAPL" autocomplete="off" aria-describedby="msg">
-      <button id="go">Explain it</button>
+  <header>
+    <div class="wrap nav">
+      <div class="brand">plain<span>vest</span></div>
+      <div class="nav-note">Understand the business behind the ticker</div>
     </div>
+  </header>
 
-    <div class="chips">
-      <span>Try:</span>
-      <button class="chip" data-t="AAPL">AAPL</button>
-      <button class="chip" data-t="KO">KO</button>
-      <button class="chip" data-t="TSLA">TSLA</button>
-    </div>
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Investing, in plain English</div>
+      <h1>Understand a company<br>before you invest.</h1>
+      <p>Explore financial results, recent SEC announcements, cash flow, and balance-sheet figures without getting buried in jargon.</p>
+      <form class="search" id="searchForm">
+        <input id="tickerInput" name="ticker" maxlength="8" placeholder="Enter a ticker, e.g. AAPL" autocomplete="off" aria-label="Stock ticker" required>
+        <button class="primary" id="searchButton" type="submit">Analyze company</button>
+      </form>
+      <div class="limit-note">Up to 3 successful company analyses per day.</div>
+      <div id="message" role="status" aria-live="polite"></div>
+    </section>
 
-    <p id="msg" role="status"></p>
-    <div id="result" aria-live="polite"></div>
-  </div>
-</header>
-
-<section class="how">
-  <h2>What you get</h2>
-  <div class="cols">
-    <div>
-      <h3>Jargon, translated</h3>
-      <p>Every number comes with its technical name and what it means for you.</p>
-    </div>
-    <div>
-      <h3>Four quick checks</h3>
-      <p>Profit, debt, growth, and cash, each with a clear good, watch, or concern label.</p>
-    </div>
-    <div>
-      <h3>Risks up front</h3>
-      <p>The biggest things that could hurt the company, stated plainly.</p>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <p>
-    Plainvest explains public company information for education. It does not give
-    investment advice or tell you what to buy or sell. Figures come from public
-    SEC filings and may lag recent events.
-  </p>
-</footer>
-
-</div>
-
-<script>
-const $ = id => document.getElementById(id);
-
-const L = {
-  good:"Looks good",
-  warn:"Watch this",
-  bad:"Concern",
-  na:"Not enough data"
-};
-
-const K = {
-  positive:["good","Positive"],
-  negative:["bad","Negative"],
-  watch:["warn","Watch"],
-  event:["na","Event"]
-};
-
-const esc = s => String(s ?? "").replace(/[&<>"]/g,c=>({
-  "&":"&amp;",
-  "<":"&lt;",
-  ">":"&gt;",
-  '"':"&quot;"
-}[c]));
-
-const mn = v => {
-  if (v == null || !Number.isFinite(Number(v))) return "–";
-  v = Number(v);
-  const a = Math.abs(v);
-  const s = v < 0 ? "-$" : "$";
-
-  if (a >= 1e12) return s + (a/1e12).toFixed(2) + "T";
-  if (a >= 1e9) return s + (a/1e9).toFixed(2) + "B";
-  if (a >= 1e6) return s + (a/1e6).toFixed(0) + "M";
-  return s + Math.round(a).toLocaleString("en-US");
-};
-
-const pc = x => {
-  if (x == null || !Number.isFinite(Number(x))) return "–";
-  x = Number(x);
-  return (x >= 0 ? "+" : "") + (x*100).toFixed(0) + "%";
-};
-
-const sg = v => v == null ? "" : Number(v) < 0 ? "neg" : "pos";
-
-const qn = e => {
-  if (!e) return "–";
-  const date = new Date(e + "T00:00:00Z");
-  if (Number.isNaN(date.getTime())) return String(e);
-  return date.toLocaleString("en-US",{
-    month:"short",
-    year:"numeric",
-    timeZone:"UTC"
-  });
-};
-
-const card = (t,kind,body) => `
-  <div class="check">
-    <div class="ctop">
-      <h3>${esc(t)}</h3>
-      <span class="pill ${kind[0]}">${kind[1]}</span>
-    </div>
-    ${body}
-  </div>
-`;
-
-const busy = b => {
-  $("go").disabled = b;
-  document.querySelectorAll(".chip").forEach(x => x.disabled = b);
-};
-
-function eventField(e,key) {
-  const x = e.explanation;
-  const v = (x && typeof x === "object" ? x[key] : null) ?? e[key];
-  return typeof v === "string" ? v.trim() : "";
-}
-
-/*
-  Draws a responsive SVG chart.
-  Revenue bars use #1c4bb0.
-  Profit bars use #3569db whether profit is positive or negative.
-*/
-function makeQuarterChart(quarters) {
-  const data = (quarters || [])
-    .filter(q => q && q.end)
-    .slice(-8);
-
-  if (!data.length) {
-    return `
-      <div class="chart-card">
-        <p class="chart-empty">
-          Quarterly chart data isn't available for this company yet.
-        </p>
-      </div>
-    `;
-  }
-
-  const W = Math.max(360, data.length * 76 + 48);
-  const H = 270;
-  const left = 42;
-  const right = 12;
-  const top = 16;
-  const bottom = 42;
-  const plotW = W - left - right;
-  const plotH = H - top - bottom;
-
-  const vals = data.flatMap(q => [
-    Number(q.sales) || 0,
-    Number(q.profit) || 0
-  ]);
-
-  const maxVal = Math.max(1, ...vals, 0);
-  const minVal = Math.min(0, ...vals);
-  const range = Math.max(1, maxVal - minVal);
-  const paddedMax = maxVal + range * 0.08;
-  const paddedMin = minVal - range * 0.08;
-  const fullRange = paddedMax - paddedMin;
-
-  const y = v => top + ((paddedMax - v) / fullRange) * plotH;
-  const zeroY = y(0);
-  const slot = plotW / data.length;
-  const barW = Math.min(23, slot * 0.29);
-  const gap = Math.min(5, slot * 0.06);
-
-  let grid = "";
-
-  for (let i=0; i<=4; i++) {
-    const val = paddedMax - (fullRange * i / 4);
-    const yy = y(val);
-
-    grid += `
-      <line x1="${left}" y1="${yy}" x2="${W-right}" y2="${yy}"
-        class="chart-grid"/>
-      <text x="${left-6}" y="${yy+4}" text-anchor="end" class="chart-label">
-        ${esc(axisValue(val))}
-      </text>
-    `;
-  }
-
-  let bars = "";
-
-  data.forEach((q,i) => {
-    const center = left + slot * (i + 0.5);
-    const revenue = Number(q.sales) || 0;
-    const profit = q.profit == null ? null : Number(q.profit);
-    const revX = center - barW - gap/2;
-    const profitX = center + gap/2;
-
-    const revY = y(Math.max(0,revenue));
-    const revHeight = Math.max(0,zeroY-revY);
-
-    bars += `
-      <rect
-        x="${revX}"
-        y="${revY}"
-        width="${barW}"
-        height="${Math.max(0.8,revHeight)}"
-        rx="5"
-        ry="5"
-        fill="#1c4bb0">
-        <title>${esc(qn(q.end))} revenue: ${esc(mn(revenue))}</title>
-      </rect>
-    `;
-
-    if (profit !== null && Number.isFinite(profit)) {
-      const profitY = y(Math.max(0,profit));
-      const profitBottom = y(Math.min(0,profit));
-      const profitHeight = Math.max(0.8,profitBottom-profitY);
-
-      bars += `
-        <rect
-          x="${profitX}"
-          y="${profitY}"
-          width="${barW}"
-          height="${profitHeight}"
-          rx="5"
-          ry="5"
-          fill="#3569db">
-          <title>${esc(qn(q.end))} profit: ${esc(mn(profit))}</title>
-        </rect>
-      `;
-    }
-
-    bars += `
-      <text x="${center}" y="${H-17}" text-anchor="middle" class="chart-label">
-        ${esc(qn(q.end))}
-      </text>
-    `;
-  });
-
-  return `
-    <div class="chart-card">
-      <div class="chart-legend">
-        <span class="legend-item">
-          <span class="legend-dot revenue-dot"></span> Revenue
-        </span>
-        <span class="legend-item">
-          <span class="legend-dot profit-dot"></span> Profit (including losses)
-        </span>
+    <section id="results" aria-live="polite">
+      <div class="company-head">
+        <div class="ticker-label" id="tickerLabel"></div>
+        <h2 class="company-name" id="companyName"></h2>
+        <div class="period" id="periodLabel"></div>
       </div>
 
-      <div class="chart-scroll">
-        <svg
-          class="quarter-chart"
-          viewBox="0 0 ${W} ${H}"
-          role="img"
-          aria-label="Quarterly revenue and profit chart">
-          ${grid}
-          <line
-            x1="${left}"
-            y1="${zeroY}"
-            x2="${W-right}"
-            y2="${zeroY}"
-            class="chart-zero"/>
-          ${bars}
-        </svg>
+      <section class="card">
+        <div class="eyebrow">The business</div>
+        <h2>What the company does</h2>
+        <p class="description" id="companyDescription">Description unavailable.</p>
+      </section>
+
+      <section class="card">
+        <div class="eyebrow">The latest results</div>
+        <h2>What changed?</h2>
+        <p class="sub" id="summaryText">Based on the latest available SEC filings.</p>
+        <div class="stat-grid" id="statGrid"></div>
+      </section>
+
+      <div class="two-col">
+        <section class="card">
+          <h2>Revenue over time</h2>
+          <p class="sub">Quarterly sales, newest quarter first in the table below.</p>
+          <div class="chart-wrap"><svg id="revenueChart" class="chart" viewBox="0 0 520 245" role="img" aria-label="Quarterly revenue chart"></svg></div>
+          <div class="chart-legend"><span><i class="dot" style="background:#1c4bb0"></i>Revenue</span></div>
+        </section>
+        <section class="card">
+          <h2>Profit over time</h2>
+          <p class="sub">Profit can fall below zero when the company reports a loss.</p>
+          <div class="chart-wrap"><svg id="profitChart" class="chart" viewBox="0 0 520 245" role="img" aria-label="Quarterly profit chart"></svg></div>
+          <div class="chart-legend"><span><i class="dot" style="background:#3569db"></i>Profit or loss</span></div>
+        </section>
       </div>
 
-      <p class="chart-tooltip">
-        Hover over a bar to see its exact value. Profit bars extend below zero
-        when the company reports a loss. Revenue and profit each keep their
-        own colour regardless of whether the value is positive or negative.
-      </p>
-    </div>
-  `;
-}
+      <section class="card">
+        <h2>Free cash flow over time</h2>
+        <p class="sub">Cash generated after capital spending. A negative quarter means more cash went out than came in after that spending.</p>
+        <div class="chart-wrap"><svg id="cashChart" class="chart" viewBox="0 0 900 260" role="img" aria-label="Quarterly free cash flow chart"></svg></div>
+        <div class="chart-legend"><span><i class="dot" style="background:#16845b"></i>Positive free cash flow</span><span><i class="dot" style="background:#c04444"></i>Negative free cash flow</span></div>
+      </section>
 
-function axisValue(v) {
-  const a = Math.abs(v);
-  const sign = v < 0 ? "-" : "";
-
-  if (a >= 1e12) return sign + "$" + (a/1e12).toFixed(1) + "T";
-  if (a >= 1e9) return sign + "$" + (a/1e9).toFixed(1) + "B";
-  if (a >= 1e6) return sign + "$" + (a/1e6).toFixed(0) + "M";
-  if (a >= 1000) return sign + "$" + (a/1000).toFixed(0) + "K";
-
-  return sign + "$" + Math.round(a);
-}
-
-async function run(k) {
-  k = (k || $("t").value).trim().toUpperCase();
-
-  const r = $("result");
-  const m = $("msg");
-
-  m.textContent = "";
-  m.style.color = "var(--bad)";
-  r.innerHTML = "";
-
-  if (!k) {
-    m.textContent = "Enter a ticker, like AAPL.";
-    return;
-  }
-
-  if ($("go").disabled) return;
-
-  $("t").value = k;
-  m.style.color = "var(--mute)";
-
-  const msgs = [
-    "Finding the company...",
-    "Reading its quarterly reports...",
-    "Checking recent announcements...",
-    "Writing it up in plain English..."
-  ];
-
-  let i = 0;
-
-  r.innerHTML = `
-    <div class="loading" role="status">
-      <div class="spin" aria-hidden="true"></div>
-      <p id="lm">${msgs[0]}</p>
-      <div class="sk" aria-hidden="true">
-        <i></i><i></i><i></i>
-      </div>
-    </div>
-  `;
-
-  const tm = setInterval(() => {
-    i = Math.min(i+1,msgs.length-1);
-    const el = $("lm");
-    if (el) el.textContent = msgs[i];
-  },2500);
-
-  busy(true);
-
-  try {
-    const res = await fetch("/api/analyze?ticker=" + encodeURIComponent(k));
-    const d = await res.json();
-
-    if (!res.ok) {
-      if (res.status === 404 || res.status === 422) {
-        m.textContent = "";
-        r.innerHTML = `
-          <p class="note">
-            ${esc(d.error || "This ticker couldn't be analyzed.")}
-            Try a US company like AAPL, KO, or TSLA.
-          </p>
-        `;
-      } else {
-        r.innerHTML = "";
-        m.style.color = "var(--bad)";
-        m.textContent = d.error || "Something went wrong.";
-      }
-      return;
-    }
-
-    m.textContent = "";
-
-    const quarters = d.quarters || [];
-
-    const qs = quarters.map(q => `
-      <tr>
-        <td>${qn(q.end)}</td>
-        <td>${mn(q.sales)}</td>
-        <td class="${sg(q.salesYoY)}">${pc(q.salesYoY)}</td>
-        <td class="${sg(q.profit)}">${mn(q.profit)}</td>
-        <td>${q.margin == null ? "–" : (q.margin*100).toFixed(1)+"%"}</td>
-        <td class="${sg(q.cash)}">${mn(q.cash)}</td>
-      </tr>
-    `).join("");
-
-    const sig = (d.signals || []).map(s =>
-      card(
-        s.title,
-        K[s.kind] || K.event,
-        `<p>${esc(s.text)}</p>`
-      )
-    ).join("") ||
-      `<p class="jargon">No big swings stood out in the latest quarter's numbers.</p>`;
-
-    const ev = (d.events || []).map(e => {
-      const what = eventField(e,"whatHappened");
-      const why = eventField(e,"whyItMatters");
-      const impact = eventField(e,"potentialImpact");
-      const uncertain = eventField(e,"uncertainty");
-      const details = typeof e.details === "string" ? e.details.trim() : "";
-
-      const date = e.date ? `<span>${esc(e.date)}</span>` : "";
-
-      const link = e.url && e.url.startsWith("https://www.sec.gov/")
-        ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
-        : "";
-
-      const explanation = `
-        <div class="event-explanation">
-          ${what ? `<p><strong>What happened:</strong> ${esc(what)}</p>` : ""}
-          ${why ? `<p><strong>Why it matters:</strong> ${esc(why)}</p>` : ""}
-          ${impact ? `<p><strong>Potential impact:</strong> ${esc(impact)}</p>` : ""}
-          ${uncertain ? `<p><strong>What's uncertain:</strong> ${esc(uncertain)}</p>` : ""}
-          ${!what && !why && !impact && !uncertain
-            ? `<p class="jargon">An explanation isn't available for this announcement yet.</p>`
-            : ""}
+      <section class="card">
+        <h2>Quarter-by-quarter results</h2>
+        <p class="sub">Year-over-year compares each quarter with the same quarter one year earlier, not the previous quarter.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Quarter ended</th><th>Revenue</th><th>Revenue YoY</th><th>Profit / loss</th><th>Profit margin</th><th>Free cash flow</th></tr></thead>
+            <tbody id="quarterRows"></tbody>
+          </table>
         </div>
-        ${details ? `
-          <details class="event-details">
-            <summary>Additional filing details</summary>
-            <p>${esc(details)}</p>
-          </details>
-        ` : ""}
-      `;
+      </section>
 
-      return card(
-        e.title || "Company announcement",
-        K[e.kind] || K.event,
-        `${date ? `<p class="jargon">${date}${link}</p>` : ""}${explanation}`
-      );
-    }).join("") ||
-      `<p class="jargon">No notable announcements in the past year.</p>`;
-
-    const description = typeof d.companyDescription === "string"
-      ? d.companyDescription.trim()
-      : "";
-
-    r.innerHTML = `
-      <div class="head">
-        <h2>${esc(d.name)} (${esc(d.ticker)})</h2>
-        <span class="tag">${esc(d.periodLabel || "")}</span>
-      </div>
-
-      ${description ? `
-        <p class="about">${esc(description)}</p>
-      ` : ""}
-
-      <p class="summary">${esc(d.summary || "")}</p>
-
-      <h3 class="sec">Revenue and profit over time</h3>
-      ${makeQuarterChart(quarters)}
-
-      <h3 class="sec">Quarter by quarter</h3>
-      <div class="tw">
-        <table class="qt">
-          <thead>
-            <tr>
-              <th>Quarter</th>
-              <th>Sales</th>
-              <th>vs year ago</th>
-              <th>Profit</th>
-              <th>Margin</th>
-              <th>Cash</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${qs || `<tr><td colspan="6">Quarterly figures aren't available.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-
-      <h3 class="sec">What changed in the numbers</h3>
-      ${sig}
-
-      <h3 class="sec">Recent company announcements</h3>
-      ${ev}
-
-      <p class="note">
-        These announcements are based on company filings with the SEC.
-        Explanations describe why an announcement may matter, not a guaranteed
-        outcome for the stock. They may not include news, analyst views, or
-        upcoming events.
-      </p>
-
-      <h3 class="sec">Four quick checks (latest quarter)</h3>
-
-      ${(d.checks || []).map(c => `
-        <div class="check">
-          <div class="ctop">
-            <h3>${esc(c.title)}</h3>
-            <span class="pill ${esc(c.status)}">${L[c.status] || L.na}</span>
+      <section class="card">
+        <h2>Balance sheet</h2>
+        <p class="sub" id="balanceDate">Latest available reporting date. Figures depend on what the company separately reports.</p>
+        <div class="stat-grid" id="balanceSummary"></div>
+        <div style="height:14px"></div>
+        <div class="balance-groups">
+          <div>
+            <div class="eyebrow">What the company owns</div>
+            <div id="assetsBoxes"></div>
           </div>
-          <span class="jargon">Technical name: ${esc(c.jargon)}</span>
-          <p>${esc(c.text)}</p>
+          <div>
+            <div class="eyebrow">How it is funded</div>
+            <div id="liabilitiesBoxes"></div>
+          </div>
         </div>
-      `).join("")}
+      </section>
 
-      <div class="risks">
-        <h3>What could go wrong</h3>
-        <ul>
-          ${(d.risks || []).map(x => `<li>${esc(x)}</li>`).join("")}
-        </ul>
-      </div>
+      <section class="card">
+        <h2>What changed in the numbers</h2>
+        <p class="sub">Not every change is good or bad on its own. These are signals to investigate, not predictions.</p>
+        <div id="signals" class="signal-list"></div>
+      </section>
 
-      <p class="note">
-        Based on the company's quarterly filings with the SEC.
-        Education only, not investment advice.
-      </p>
-    `;
-  } catch (e) {
-    r.innerHTML = "";
-    m.style.color = "var(--bad)";
-    m.textContent = "Couldn't reach the server. Try again.";
-  } finally {
-    clearInterval(tm);
-    busy(false);
-  }
-}
+      <section class="card">
+        <h2>Quick checks</h2>
+        <p class="sub">A simple snapshot of profitability, debt, growth, and cash generation.</p>
+        <div id="checks" class="checks"></div>
+      </section>
 
-$("go").onclick = () => run();
+      <section class="card">
+        <h2>Recent company announcements</h2>
+        <p class="sub">SEC filings from the last 90 days when available. Open a filing for the original source.</p>
+        <div id="events" class="event-list"></div>
+        <div style="margin-top:12px"><a class="source-link" href="https://www.sec.gov/edgar/search/" target="_blank" rel="noopener noreferrer">Search SEC filings</a></div>
+      </section>
 
-$("t").addEventListener("keydown",e => {
-  if (e.key === "Enter") run();
-});
+      <section class="card">
+        <h2>Risks to keep in mind</h2>
+        <div id="risks" class="risk-list"></div>
+      </section>
+    </section>
+  </main>
 
-document.querySelectorAll(".chip").forEach(b => {
-  b.onclick = () => run(b.dataset.t);
-});
-</script>
+  <footer>
+    <div class="wrap disclaimer">
+      <strong>Important:</strong> Plainvest is an educational tool, not financial advice. Financial data can be incomplete or presented differently across companies. SEC filings are the source of the financial figures; AI-written explanations may be imperfect. Always check the original filing before making an investment decision.
+    </div>
+  </footer>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const money = value => {
+      if (value == null || !Number.isFinite(Number(value))) return "Not reported";
+      const n = Number(value);
+      const abs = Math.abs(n);
+      const sign = n < 0 ? "-$" : "$";
+      if (abs >= 1e9) return sign + (abs / 1e9).toFixed(1) + "B";
+      if (abs >= 1e6) return sign + (abs / 1e6).toFixed(1) + "M";
+      if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + "K";
+      return sign + Math.round(abs).toLocaleString("en-US");
+    };
+    const percent = value => value == null || !Number.isFinite(Number(value))
+      ? "Not reported"
+      : (Number(value) >= 0 ? "+" : "") + (Number(value) * 100).toFixed(1) + "%";
+    const dateLabel = value => {
+      if (!value) return "Date unavailable";
+      const date = new Date(value + "T12:00:00Z");
+      return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", {year:"numeric", month:"short", day:"numeric", timeZone:"UTC"});
+    };
+    const safe = value => String(value ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+    }[c]));
+    const tone = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : "neutral";
+
+    function showMessage(text, type = "info") {
+      $("message").textContent = text;
+      $("message").className = type;
+    }
+
+    function stat(label, value, detail = "") {
+      return `<div class="stat"><div class="stat-label">${safe(label)}</div><div class="stat-value">${safe(value)}</div><div class="stat-detail">${safe(detail)}</div></div>`;
+    }
+
+    function drawChart(id, rows, key, color, wide = false) {
+      const svg = $(id);
+      const width = wide ? 900 : 520;
+      const height = wide ? 260 : 245;
+      const left = 60, right = 16, top = 18, bottom = 42;
+      const plotW = width - left - right, plotH = height - top - bottom;
+      const values = rows.map(r => r[key] == null ? null : Number(r[key]));
+      const valid = values.filter(v => v != null && Number.isFinite(v));
+      if (!valid.length) {
+        svg.innerHTML = `<text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#69768c" font-size="13">No quarterly data available</text>`;
+        return;
+      }
+      let min = Math.min(0, ...valid), max = Math.max(0, ...valid);
+      if (max === min) max = min + 1;
+      const pad = (max - min) * .12;
+      min -= pad; max += pad;
+      const x = i => left + (rows.length <= 1 ? plotW/2 : i * plotW/(rows.length-1));
+      const y = v => top + (max-v)/(max-min)*plotH;
+      const zeroY = y(0);
+      let out = "";
+      for (let i=0; i<4; i++) {
+        const v = min + (max-min)*i/3;
+        const yy = y(v);
+        out += `<line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" stroke="#e7ebf2" stroke-dasharray="3 5"/>`;
+        out += `<text x="${left-8}" y="${yy+4}" text-anchor="end" font-size="10" fill="#69768c">${axisMoney(v)}</text>`;
+      }
+      if (min < 0 && max > 0) out += `<line x1="${left}" y1="${zeroY}" x2="${width-right}" y2="${zeroY}" stroke="#9aa7ba" stroke-width="1.4"/>`;
+      const points = values.map((v,i) => v == null ? null : [x(i),y(v)]);
+      let path = "";
+      points.forEach((p,i) => {
+        if (!p) return;
+        path += (i === 0 || !points[i-1] ? "M" : "L") + p[0] + " " + p[1] + " ";
+      });
+      if (path) out += `<path d="${path}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+      points.forEach((p,i) => {
+        if (!p) return;
+        out += `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${color}"><title>${safe(rows[i].end)}: ${safe(money(values[i]))}</title></circle>`;
+      });
+      rows.forEach((r,i) => {
+        if (rows.length > 8 && i % 2) return;
+        const label = (r.end || "").slice(0,7);
+        out += `<text x="${x(i)}" y="${height-15}" text-anchor="middle" font-size="${wide?11:10}" fill="#69768c">${safe(label)}</text>`;
+      });
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.innerHTML = out;
+    }
+
+    function axisMoney(v) {
+      const abs = Math.abs(v), sign = v < 0 ? "-" : "";
+      if (abs >= 1e9) return sign + "$" + (abs/1e9).toFixed(1) + "B";
+      if (abs >= 1e6) return sign + "$" + (abs/1e6).toFixed(0) + "M";
+      if (abs >= 1e3) return sign + "$" + (abs/1e3).toFixed(0) + "K";
+      return sign + "$" + Math.round(abs);
+    }
+
+    function renderQuarters(rows) {
+      $("quarterRows").innerHTML = rows.map(r => `
+        <tr>
+          <td>${safe(r.end)}</td>
+          <td>${safe(money(r.sales))}</td>
+          <td class="${tone(r.salesYoY)}">${safe(percent(r.salesYoY))}</td>
+          <td class="${tone(r.profit)}">${safe(money(r.profit))}</td>
+          <td class="${tone(r.margin)}">${safe(percent(r.margin))}</td>
+          <td class="${tone(r.cash)}">${safe(money(r.cash))}</td>
+        </tr>`).join("");
+    }
+
+    function renderSignals(items) {
+      $("signals").innerHTML = items?.length ? items.map(s => `
+        <article class="signal">
+          <div class="signal-top"><h3>${safe(s.title)}</h3><span class="pill ${safe(s.kind || "event")}">${safe(s.kind || "Note")}</span></div>
+          <p>${safe(s.text)}</p>
+        </article>`).join("") : `<div class="empty">No major changes were detected in the tracked figures, or there is not enough data to compare them.</div>`;
+    }
+
+    function renderChecks(items) {
+      $("checks").innerHTML = (items || []).map(c => `
+        <article class="check">
+          <div class="check-head"><h3>${safe(c.title)}</h3><span class="status ${safe(c.status || "na")}">${safe(c.status || "na")}</span></div>
+          <div class="jargon">${safe(c.jargon || "")}</div>
+          <p>${safe(c.text || "Not enough information to assess this check.")}</p>
+        </article>`).join("");
+    }
+
+    function renderRisks(items) {
+      $("risks").innerHTML = (items?.length ? items : ["The available filings do not identify specific risks in a standard format."]).map(r =>
+        `<div class="risk"><p>${safe(r)}</p></div>`).join("");
+    }
+
+    function balanceRows(items) {
+      if (!items?.length) return `<div class="empty">These details were not separately reported in the available SEC data.</div>`;
+      return items.map(item => `
+        <div class="balance-row"><span>${safe(item.label)}</span><strong>${item.value == null ? "Not separately reported" : safe(money(item.value))}</strong></div>`).join("");
+    }
+
+    function renderBalance(data) {
+      $("balanceDate").textContent = "Reporting date: " + (data?.date || "unavailable") + ". Categories are shown only when a usable SEC figure was found.";
+      const summary = [
+        ["Total assets", data?.totalAssets],
+        ["Total liabilities", data?.totalLiabilities],
+        ["Shareholders' equity", data?.equity],
+        ["Cash and equivalents", data?.cashAndEquivalents]
+      ];
+      $("balanceSummary").innerHTML = summary.map(([label,value]) => stat(label, money(value))).join("");
+
+      const assets = data?.assets || [];
+      const funding = data?.funding || [];
+      $("assetsBoxes").innerHTML = `
+        <details class="balance-box" open><summary>Assets breakdown</summary><div class="balance-content">
+          ${balanceRows(assets)}
+          <div class="balance-row balance-total"><span>Total assets</span><strong>${safe(money(data?.totalAssets))}</strong></div>
+        </div></details>`;
+      $("liabilitiesBoxes").innerHTML = `
+        <details class="balance-box" open><summary>Liabilities and equity</summary><div class="balance-content">
+          ${balanceRows(funding)}
+          <div class="balance-row balance-total"><span>Total liabilities</span><strong>${safe(money(data?.totalLiabilities))}</strong></div>
+          <div class="balance-row balance-total"><span>Shareholders' equity</span><strong>${safe(money(data?.equity))}</strong></div>
+        </div></details>`;
+    }
+
+    function renderEvents(events) {
+      if (!events?.length) {
+        $("events").innerHTML = `<div class="empty">No matching announcements were found in the recent SEC filings, or filings could not be loaded.</div>`;
+        return;
+      }
+      $("events").innerHTML = events.map(e => {
+        const ex = e.explanation;
+        return `<article class="event">
+          <div class="event-date">${safe(dateLabel(e.date))}</div>
+          <div class="event-top"><h3>${safe(e.title || "Company filing")}</h3><span class="pill ${safe(e.kind || "event")}">${safe(e.kind || "event")}</span></div>
+          ${ex ? `<div class="event-explanation">
+            <div><strong>What happened:</strong> ${safe(ex.whatHappened)}</div>
+            <div><strong>Why it matters:</strong> ${safe(ex.whyItMatters)}</div>
+            <div><strong>Possible business impact:</strong> ${safe(ex.potentialImpact)}</div>
+            <div><strong>What remains unclear:</strong> ${safe(ex.uncertainty)}</div>
+          </div>` : `<p style="margin-top:10px">The filing was identified, but there was not enough readable filing text to produce a reliable explanation.</p>`}
+          ${e.url ? `<div style="margin-top:10px"><a href="${safe(e.url)}" target="_blank" rel="noopener noreferrer">Read SEC filing ↗</a></div>` : ""}
+        </article>`;
+      }).join("");
+    }
+
+    function render(data) {
+      const rows = (data.quarters || []).slice(0,8);
+      $("tickerLabel").textContent = data.ticker || "";
+      $("companyName").textContent = data.name || data.ticker || "Company";
+      $("periodLabel").textContent = data.periodLabel || "";
+      $("companyDescription").textContent = data.companyDescription || "A plain-English business description could not be generated from the available SEC text.";
+      $("summaryText").textContent = data.summary || "The latest available financial data is shown below.";
+      const latest = rows[0] || {};
+      $("statGrid").innerHTML = [
+        stat("Latest revenue", money(latest.sales), latest.end || ""),
+        stat("Revenue growth YoY", percent(latest.salesYoY), "Compared with the same quarter last year"),
+        stat("Profit / loss", money(latest.profit), "Latest reported quarter"),
+        stat("Free cash flow", money(latest.cash), "Operating cash flow minus capital spending")
+      ].join("");
+      drawChart("revenueChart", rows.slice().reverse(), "sales", "#1c4bb0");
+      drawChart("profitChart", rows.slice().reverse(), "profit", "#3569db");
+      drawChart("cashChart", rows.slice().reverse(), "cash", "#16845b", true);
+      renderQuarters(rows);
+      renderBalance(data.balanceSheet || {});
+      renderSignals(data.signals || []);
+      renderChecks(data.checks || []);
+      renderEvents(data.events || []);
+      renderRisks(data.risks || []);
+      $("results").style.display = "block";
+    }
+
+    $("searchForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const ticker = $("tickerInput").value.trim().toUpperCase();
+      if (!ticker) return;
+      $("searchButton").disabled = true;
+      $("searchButton").textContent = "Analyzing…";
+      $("results").style.display = "none";
+      $("message").className = "";
+      $("message").style.display = "none";
+      showMessage("Fetching SEC financial data and preparing the explanation…", "info");
+
+      try {
+        const response = await fetch("/api/analyze?ticker=" + encodeURIComponent(ticker), {
+          method: "GET",
+          cache: "no-store",
+          headers: { "Accept": "application/json" }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "The company could not be analyzed. Please try again.");
+        render(data);
+        $("message").className = "";
+        $("message").style.display = "none";
+        $("results").scrollIntoView({behavior:"smooth", block:"start"});
+      } catch (error) {
+        showMessage(error.message || "Couldn't reach the server. Please try again.", "error");
+      } finally {
+        $("searchButton").disabled = false;
+        $("searchButton").textContent = "Analyze company";
+      }
+    });
+  </script>
 </body>
 </html>
