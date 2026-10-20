@@ -17,9 +17,8 @@ const DAY = 864e5;
 const DAILY_ANALYSIS_LIMIT = 3;
 const CLAUDE_MODEL = "claude-haiku-5-5";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
-const CLAUDE_TIMEOUT_MS = 20000;
+const CLAUDE_TIMEOUT_MS = 18000;
 const EVENT_TIMEOUT_MS = 6000;
-
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -1167,68 +1166,52 @@ async function aiWrite(name, out, companyInfo = {}) {
       .map(signal => `${signal.kind}: ${signal.title}. ${signal.text}`)
       .join("\n") || "No major changes identified.";
 
-    const eventInputs = (out.events || []).map((event, index) => ({
+    // Send only the five newest announcements to the AI and keep each filing
+    // excerpt short. The full event list remains available to the app.
+    const eventInputs = (out.events || []).slice(0, 5).map((event, index) => ({
       index,
       date: event.date || "Unknown date",
       title: event.title || "Untitled filing",
       category: event.kind || "event",
-      filingDetails: event.details || null
+      filingDetails: typeof event.details === "string"
+        ? event.details.slice(0, 1000)
+        : null
     }));
 
-    const prompt = `You are Plainvest, a careful financial explainer for beginners.
-Use only the reliable information supplied below. Do not invent facts, products, causes, or financial figures.
-Return valid JSON only with exactly these fields:
+    const prompt = `You are Plainvest, explaining company financials to a beginner.
+Use only the supplied facts. Never invent details, causes, products, or figures. Do not give investment advice or predict stock prices.
+Return ONLY valid JSON (no markdown or text outside it), using exactly these keys:
 {
-  "companyDescription": "one or two beginner-friendly sentences",
-  "summary": "four to six plain-English sentences",
-  "risks": ["two or three short risks tied to the supplied data"],
-  "eventAnalyses": [
-    {
-      "index": 0,
-      "whatHappened": "...",
-      "whyItMatters": "...",
-      "potentialImpact": "...",
-      "uncertainty": "..."
-    }
-  ]
+  "companyDescription": "1-2 simple sentences describing the business, only if supported",
+  "summary": "about 4 concise sentences explaining the latest results and important changes",
+  "risks": ["up to 3 concise risks supported by the data"],
+  "eventAnalyses": [{
+    "index": 0,
+    "whatHappened": "1 concise sentence based on the filing details",
+    "whyItMatters": "1 concise sentence explaining business relevance",
+    "potentialImpact": "1 concise sentence about possible business effects, not share price",
+    "uncertainty": "1 concise sentence stating what is unknown or unproven"
+  }]
 }
 
-COMPANY DESCRIPTION RULES:
-- Explain what the company does in plain English, for a beginner.
-- Use the company name and SEC industry classification supplied below.
-- Do not treat an industry classification as proof of particular products, customers, or services.
-- If the supplied information is insufficient to describe its actual business accurately, say that clearly.
-- Do not claim to have researched outside sources.
+Rules:
+- Describe the company's actual business only when supported by the company name and SEC industry classification below. An industry label alone does not prove specific products, customers, or services; otherwise say information is insufficient.
+- Start the summary with latest-quarter revenue and year-over-year change, plus profit/loss if available. Explain the most important changes and why they matter. If the data does not establish a cause, say so.
+- Explain each supplied announcement beyond simply repeating its title. Do not infer details from a title alone. If filing details are limited, say so.
+- Return one eventAnalyses item per supplied announcement, preserving its index. If there are no announcements, use an empty array.
+- Keep every field brief so the response remains valid JSON.
 
-SUMMARY RULES:
-- Start with the latest quarter's revenue and year-over-year change, and profit/loss if available.
-- Explain the most important changes using the supplied comparisons and figures.
-- Explain why each change could matter in simple terms.
-- If the data does not establish a cause, explicitly say it does not tell us why.
-- Do not give buy/sell advice or price predictions.
-
-EVENT ANALYSIS RULES:
-- Return exactly one eventAnalyses entry for every supplied announcement, preserving its index and order.
-- Read the filingDetails field first. When it contains meaningful filing text, base the explanation on those details rather than the short category title.
-- In whatHappened, state the specific action, decision, or disclosure described by the filing in plain English. Do not merely restate the event title.
-- In whyItMatters, connect that disclosed fact to a reasonable business consideration for the company or its investors.
-- In potentialImpact, describe plausible operational or financial implications only when supported by the filing; do not predict stock prices.
-- In uncertainty, state what cannot be concluded from the supplied filing text.
-- If filingDetails is missing, empty, boilerplate, or too incomplete to establish what happened, explicitly say the filing text available to Plainvest is insufficient. Do not guess based on the title or SEC item code.
-- Keep each field specific and useful, usually one or two sentences.
-- If there are no announcements, return an empty eventAnalyses array.
-
-COMPANY NAME: ${name}
-SEC INDUSTRY CLASSIFICATION: ${companyInfo.industry || "Not available"}
+COMPANY: ${name}
+SEC INDUSTRY: ${companyInfo.industry || "Not available"}
 SEC SIC CODE: ${companyInfo.sic || "Not available"}
 
-QUARTERS (newest first):
+QUARTERS, NEWEST FIRST:
 ${quarterData}
 
-CHANGES IN THE NUMBERS:
+IMPORTANT CHANGES:
 ${signalData}
 
-RECENT COMPANY ANNOUNCEMENTS (filing text may be incomplete):
+UP TO FIVE RECENT ANNOUNCEMENTS (details may be incomplete):
 ${JSON.stringify(eventInputs)}`;
 
     const response = await fetchWithTimeout(
@@ -1242,7 +1225,7 @@ ${JSON.stringify(eventInputs)}`;
         },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 3000,
+          max_tokens: 2400,
           messages: [{ role: "user", content: prompt }]
         })
       },
@@ -1279,13 +1262,23 @@ ${JSON.stringify(eventInputs)}`;
     let parsed;
 
     try {
-      const cleaned = raw
+      // Strip optional markdown fences and any accidental text around the JSON.
+      let cleaned = raw
         .replace(/^```(?:json)?\s*/i, "")
         .replace(/\s*```$/, "")
         .trim();
+      const firstBrace = cleaned.indexOf("{");
+      const lastBrace = cleaned.lastIndexOf("}");
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("Claude returned invalid JSON.");
+      console.error("Claude returned invalid JSON.", {
+        stopReason: data.stop_reason || "unknown",
+        responseLength: raw.length,
+        responseEnding: raw.slice(-250)
+      });
       return {
         companyDescription: fallback,
         aiAvailable: false
