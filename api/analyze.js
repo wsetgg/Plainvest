@@ -153,9 +153,9 @@ async function releaseDailyAnalysis(key) {
   await redisCommand(["EVAL", RELEASE_DAILY_SCRIPT, "1", key]);
 }
 
-// Cache successful company analyses for six hours. This avoids repeated
-// Claude calls while keeping the result fresh enough for a lightweight research tool.
-const ANALYSIS_CACHE_TTL_SECONDS = 6 * 60 * 60;
+// Financial statements change infrequently; refresh daily while exposing the
+// generation timestamp so visitors can judge freshness themselves.
+const ANALYSIS_CACHE_TTL_SECONDS = 24 * 60 * 60;
 
 async function getCachedAnalysis(ticker) {
   try {
@@ -541,11 +541,28 @@ function balance(facts) {
     "LiabilitiesNoncurrent"
   ]);
 
-  const debtMap = instantMap(facts, [
-    "LongTermDebtCurrent",
-    "LongTermDebtNoncurrent",
-    "LongTermDebt"
+  // Do not treat one debt component as total debt. Prefer the reported
+  // combined concept when present; otherwise combine current and non-current
+  // long-term debt only when both components are available for that date.
+  const currentDebtMap = instantMap(facts, ["LongTermDebtCurrent"]);
+  const noncurrentDebtMap = instantMap(facts, ["LongTermDebtNoncurrent"]);
+  const reportedDebtMap = instantMap(facts, ["LongTermDebt"]);
+  const debtEnds = new Set([
+    ...currentDebtMap.keys(),
+    ...noncurrentDebtMap.keys(),
+    ...reportedDebtMap.keys()
   ]);
+  const debtMap = new Map();
+  for (const end of debtEnds) {
+    const reported = reportedDebtMap.get(end);
+    const current = currentDebtMap.get(end);
+    const noncurrent = noncurrentDebtMap.get(end);
+    if (reported != null) {
+      debtMap.set(end, reported);
+    } else if (current != null && noncurrent != null) {
+      debtMap.set(end, current + noncurrent);
+    }
+  }
 
   const ends = [
     ...new Set([
@@ -684,7 +701,10 @@ function analyzeFacts(facts) {
     if (operatingCash == null) return null;
 
     const capex = qAt(capexQuarters, end, offset);
-    return operatingCash - (capex == null ? 0 : Math.abs(capex));
+    // Missing capex is not zero. Without both components, free cash flow
+    // cannot be calculated reliably and must remain unavailable.
+    if (capex == null) return null;
+    return operatingCash - Math.abs(capex);
   };
 
   // Keep these calculations newest-first. The frontend sorts a copy
@@ -1534,25 +1554,23 @@ async function handler(req, res) {
       );
     }
 
-    // Reserve one of the visitor's daily analyses.
-    const reservation = await reserveDailyAnalysis(req);
-
-    if (!reservation.allowed) {
-      throw new HttpError(
-        429,
-        "You've reached today's limit of 50 company analyses. Your limit resets at midnight UTC."
-      );
-    }
-
-    dailyReservationKey = reservation.key;
-
+    // Reuse a shared saved result before reserving an expensive fresh analysis.
+    // Cache hits do not consume the daily allowance because they do not call the
+    // SEC facts endpoint or Claude. The allowance still protects fresh analyses.
     const cachedAnalysis = await getCachedAnalysis(ticker);
     if (cachedAnalysis) {
-      // A cache hit still counts toward the visitor's daily usage limit.
-      dailyReservationKey = null;
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ ...cachedAnalysis, cached: true });
     }
+
+    const reservation = await reserveDailyAnalysis(req);
+    if (!reservation.allowed) {
+      throw new HttpError(
+        429,
+        "You've reached today's limit of 50 new company analyses. Saved analyses do not use this allowance. Your limit resets at midnight UTC."
+      );
+    }
+    dailyReservationKey = reservation.key;
 
     const cik = String(company.cik_str).padStart(10, "0");
 
@@ -1626,7 +1644,12 @@ async function handler(req, res) {
       ticker,
       name: company.title,
       ...out,
-      ...(ai || {})
+      ...(ai || {}),
+      generatedAt: new Date().toISOString(),
+      dataSources: {
+        financials: "SEC Company Facts",
+        announcements: "SEC company submissions and linked filing exhibits"
+      }
     };
 
     await setCachedAnalysis(ticker, result);
