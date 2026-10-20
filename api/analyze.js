@@ -1320,7 +1320,7 @@ ${JSON.stringify(eventInputs)}`;
         },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 3000,
+          max_tokens: 5000,
           output_config: {
             format: {
               type: "json_schema",
