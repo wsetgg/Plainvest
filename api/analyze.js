@@ -1032,15 +1032,15 @@ function eventsFrom(submissions, cik) {
 
 function filingTextToPlainText(source) {
   return String(source || "")
-    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
-    .replace(/<!--[\\s\\S]*?-->/g, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&#(\\d+);/g, (_, value) => {
+    .replace(/&#(\d+);/g, (_, value) => {
       const code = Number(value);
       return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : " ";
     })
-    .replace(/&#x([\\da-f]+);/gi, (_, value) => {
+    .replace(/&#x([\da-f]+);/gi, (_, value) => {
       const code = parseInt(value, 16);
       return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : " ";
     })
@@ -1050,7 +1050,7 @@ function filingTextToPlainText(source) {
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -1087,9 +1087,9 @@ async function addEventDetails(events) {
               const name = String(file?.name || "");
               const type = String(file?.type || "");
               const description = String(file?.description || "");
-              return /\\.(html?|txt)$/i.test(name) &&
-                !/\\.(xhtml|xml)$/i.test(name) &&
-                (/^EX-?99(?:\\.|$)/i.test(type) ||
+              return /\.(html?|txt)$/i.test(name) &&
+                !/\.(xhtml|xml)$/i.test(name) &&
+                (/^EX-?99(?:\.|$)/i.test(type) ||
                  /press release|news release|earnings release|shareholder letter|investor presentation/i.test(description + " " + name));
             })
             .sort((a, b) => {
@@ -1100,7 +1100,7 @@ async function addEventDetails(events) {
                 if (type === "EX-99.1") points += 100;
                 else if (/^EX-?99/i.test(type)) points += 80;
                 if (/press release|news release|earnings release/i.test(text)) points += 40;
-                if (/\\.htm?$/i.test(String(file?.name || ""))) points += 10;
+                if (/\.htm?$/i.test(String(file?.name || ""))) points += 10;
                 return points;
               };
               return score(b) - score(a);
