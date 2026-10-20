@@ -1,7 +1,7 @@
 // GET /api/analyze?ticker=AAPL
 // Quarterly analysis from SEC EDGAR, including 8-K announcements.
 // Environment variables:
-// SEC_USER_AGENT, GEMINI_API_KEY, UPSTASH_REDIS_REST_URL,
+// SEC_USER_AGENT, ANTHROPIC_API_KEY, UPSTASH_REDIS_REST_URL,
 // UPSTASH_REDIS_REST_TOKEN.
 
 const { createHash } = require("node:crypto");
@@ -15,23 +15,19 @@ class HttpError extends Error {
 
 const DAY = 864e5;
 const DAILY_ANALYSIS_LIMIT = 3;
-const GEMINI_MODEL = "gemini-3.8-flash";
+const CLAUDE_MODEL = "claude-haiku-5-5";
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
+const CLAUDE_TIMEOUT_MS = 20000;
+const EVENT_TIMEOUT_MS = 6000;
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
-const GEMINI_TIMEOUT_MS = 5000;
-const EVENT_TIMEOUT_MS = 2500;
-
-async function fetchWithTimeout(
-  url,
-  options = {},
-  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
-) {
-  const signal = AbortSignal.timeout(timeoutMs);
+async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(url, { ...options, signal });
+    return await fetch(url, { ...options, signal: controller.signal });
   } catch (error) {
-    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+    if (error?.name === "AbortError") {
       let host = "upstream service";
       try {
         host = new URL(url).hostname;
@@ -43,8 +39,9 @@ async function fetchWithTimeout(
       timeoutError.code = "UPSTREAM_TIMEOUT";
       throw timeoutError;
     }
-
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -402,6 +399,8 @@ function quarters(facts, concepts) {
       )
       .sort((a, b) => b.end.localeCompare(a.end));
 
+    // Avoid duplicate reporting dates and prefer the newest supported
+    // concept when several revenue concepts are available.
     const unique = [];
     const seen = new Set();
 
@@ -657,6 +656,8 @@ function analyzeFacts(facts) {
     return operatingCash - (capex == null ? 0 : Math.abs(capex));
   };
 
+  // Keep these calculations newest-first. The frontend sorts a copy
+  // for display, so the latest-quarter calculations remain correct.
   const rows = revenueQuarters.slice(0, 8).map(quarter => {
     const income = qAt(incomeQuarters, quarter.end);
     const yearAgo = yAgo(revenueQuarters, quarter.end);
@@ -757,6 +758,7 @@ function analyzeFacts(facts) {
       `Sales were up about ${pct(now.salesYoY)} from the same quarter a year earlier.`
     );
   }
+    }
 
   if (
     incomeYearAgo != null &&
@@ -1026,13 +1028,7 @@ function eventsFrom(submissions, cik) {
 }
 
 async function addEventDetails(events) {
-  const list = (events || []).slice(0, 3);
-  const remaining = (events || []).slice(3).map(event => ({
-    ...event,
-    details: null
-  }));
-
-  const detailed = await Promise.all(list.map(async event => {
+  return Promise.all((events || []).map(async event => {
     if (!event.url) return { ...event, details: null };
 
     try {
@@ -1080,8 +1076,6 @@ async function addEventDetails(events) {
       return { ...event, details: null };
     }
   }));
-
-  return [...detailed, ...remaining];
 }
 
 const FOREIGN_MSG =
@@ -1131,6 +1125,32 @@ async function isFund(ticker) {
     return false;
   }
 }
+  try {
+    if (!fundSet || Date.now() - fundAt > 7 * DAY) {
+      const response = await fetchWithTimeout(
+        "https://www.sec.gov/files/company_tickers_mf.json",
+        { headers: H() }
+      );
+
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      const index = data.fields?.indexOf("symbol");
+
+      fundSet = new Set(
+        index >= 0
+          ? (data.data || []).map(row => String(row[index]).toUpperCase())
+          : []
+      );
+
+      fundAt = Date.now();
+    }
+
+    return fundSet.has(ticker);
+  } catch {
+    return false;
+  }
+}
 
 // A description is based on the SEC's company name and industry classification.
 // If the available SEC information is too limited, do not guess the business.
@@ -1143,7 +1163,7 @@ function fallbackDescription(name, industry) {
 }
 
 async function aiWrite(name, out, companyInfo = {}) {
-  const key = process.env.GEMINI_API_KEY;
+  const key = process.env.ANTHROPIC_API_KEY;
 
   const fallback = fallbackDescription(
     name,
@@ -1214,11 +1234,14 @@ SUMMARY RULES:
 - Do not give buy/sell advice or price predictions.
 
 EVENT ANALYSIS RULES:
-- Return one eventAnalyses entry for every supplied announcement, preserving its index.
-- Explain what the filing says without merely repeating its title.
-- Explain why it may matter and plausible business implications, not stock-price predictions.
-- Do not invent facts from a filing title alone.
-- If filing details are insufficient, say so clearly.
+- Return exactly one eventAnalyses entry for every supplied announcement, preserving its index and order.
+- Read the filingDetails field first. When it contains meaningful filing text, base the explanation on those details rather than the short category title.
+- In whatHappened, state the specific action, decision, or disclosure described by the filing in plain English. Do not merely restate the event title.
+- In whyItMatters, connect that disclosed fact to a reasonable business consideration for the company or its investors.
+- In potentialImpact, describe plausible operational or financial implications only when supported by the filing; do not predict stock prices.
+- In uncertainty, state what cannot be concluded from the supplied filing text.
+- If filingDetails is missing, empty, boilerplate, or too incomplete to establish what happened, explicitly say the filing text available to Plainvest is insufficient. Do not guess based on the title or SEC item code.
+- Keep each field specific and useful, usually one or two sentences.
 - If there are no announcements, return an empty eventAnalyses array.
 
 COMPANY NAME: ${name}
@@ -1235,27 +1258,26 @@ RECENT COMPANY ANNOUNCEMENTS (filing text may be incomplete):
 ${JSON.stringify(eventInputs)}`;
 
     const response = await fetchWithTimeout(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      "https://api.anthropic.com/v1/messages",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": key
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01"
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2
-          }
+          model: CLAUDE_MODEL,
+          max_tokens: 3000,
+          messages: [{ role: "user", content: prompt }]
         })
       },
-      GEMINI_TIMEOUT_MS
+      CLAUDE_TIMEOUT_MS
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
+      console.error("Claude API error:", response.status, errorText);
 
       return {
         companyDescription: fallback,
@@ -1265,9 +1287,13 @@ ${JSON.stringify(eventInputs)}`;
 
     const data = await response.json();
 
-    const raw = data.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
-      .join("");
+    const raw = Array.isArray(data.content)
+      ? data.content
+          .filter(block => block && block.type === "text")
+          .map(block => block.text || "")
+          .join("")
+          .trim()
+      : "";
 
     if (!raw) {
       return {
@@ -1279,9 +1305,13 @@ ${JSON.stringify(eventInputs)}`;
     let parsed;
 
     try {
-      parsed = JSON.parse(raw);
+      const cleaned = raw
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+      parsed = JSON.parse(cleaned);
     } catch {
-      console.error("Gemini returned invalid JSON.");
+      console.error("Claude returned invalid JSON.");
       return {
         companyDescription: fallback,
         aiAvailable: false
@@ -1340,7 +1370,7 @@ ${JSON.stringify(eventInputs)}`;
       aiAvailable: true
     };
   } catch (error) {
-    console.error("Gemini aiWrite failed:", error.message);
+    console.error("Claude aiWrite failed:", error.message);
 
     return {
       companyDescription: fallback,
@@ -1504,16 +1534,15 @@ async function handler(req, res) {
 
     res.setHeader("Cache-Control", "no-store");
 
-    const isTimeout = error?.code === "UPSTREAM_TIMEOUT";
-
+    const timedOut = error?.code === "UPSTREAM_TIMEOUT";
     if (!error.status) {
       console.error("Plainvest analysis failed:", error?.message || error);
     }
 
-    res.status(error.status || (isTimeout ? 504 : 500)).json({
+    res.status(error.status || (timedOut ? 504 : 500)).json({
       error: error.status
         ? error.message
-        : isTimeout
+        : timedOut
           ? "A data service took too long to respond. Please try again."
           : "Something went wrong. Try again."
     });
