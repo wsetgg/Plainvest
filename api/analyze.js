@@ -159,7 +159,7 @@ const ANALYSIS_CACHE_TTL_SECONDS = 24 * 60 * 60;
 
 async function getCachedAnalysis(ticker) {
   try {
-    const cached = await redisCommand(["GET", `plainvest:analysis:v1:${ticker}`]);
+    const cached = await redisCommand(["GET", `plainvest:analysis:v2:${ticker}`]);
     if (typeof cached !== "string" || !cached) return null;
     const parsed = JSON.parse(cached);
     return parsed && typeof parsed === "object" ? parsed : null;
@@ -173,7 +173,7 @@ async function setCachedAnalysis(ticker, result) {
   try {
     await redisCommand([
       "SET",
-      `plainvest:analysis:v1:${ticker}`,
+      `plainvest:analysis:v2:${ticker}`,
       JSON.stringify(result),
       "EX",
       String(ANALYSIS_CACHE_TTL_SECONDS)
@@ -557,10 +557,14 @@ function balance(facts) {
     const reported = reportedDebtMap.get(end);
     const current = currentDebtMap.get(end);
     const noncurrent = noncurrentDebtMap.get(end);
-    if (reported != null) {
-      debtMap.set(end, reported);
-    } else if (current != null && noncurrent != null) {
+    if (current != null && noncurrent != null) {
       debtMap.set(end, current + noncurrent);
+    } else if (current != null && reported != null) {
+      // LongTermDebt is used as a fallback for the non-current component
+      // when the dedicated non-current tag is absent.
+      debtMap.set(end, current + reported);
+    } else if (reported != null) {
+      debtMap.set(end, reported);
     }
   }
 
