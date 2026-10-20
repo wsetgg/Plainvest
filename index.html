@@ -53,6 +53,9 @@ button.chip:hover,button.chip[aria-pressed="true"]{border-color:var(--acc);color
 button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 button:disabled{opacity:.6;cursor:wait}
 .chips{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mute);font-size:14px}
+.trustline{margin:14px 0 0;color:var(--mute);font-size:13px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.trustline span+span:before{content:"·";margin-right:8px;color:var(--acc)}
+.freshness{font-size:13px;color:var(--mute);margin:8px 0}
 #msg{margin:12px 0 0;color:var(--bad);font-size:15px;min-height:1px;overflow-wrap:anywhere}
 #result{margin-top:20px}
 .head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px}
@@ -166,6 +169,7 @@ a{color:var(--acc)}
 <button type="button" class="chip" data-t="TSLA">TSLA</button>
 </div>
 
+<p class="trustline"><span>SEC-sourced financial data</span><span>Plain-English explanations</span><span>Original filing links</span></p>
 <p id="msg" role="status" aria-live="polite"></p>
 <div id="result" aria-live="polite"></div>
 </div>
@@ -814,8 +818,11 @@ function render(data) {
       : ''}
 
     <p class="summary">${esc(data.summary || 'Analysis completed, but a summary was not returned.')}</p>
+    ${data.generatedAt
+      ? `<p class="freshness">Analysis generated ${esc(new Date(data.generatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }))}${data.cached ? ' · saved result' : ''}</p>`
+      : ''}
     ${data.cached
-      ? '<p class="note">Showing a saved analysis from the last 6 hours to reduce repeat API costs. New SEC filings may have appeared since it was saved.</p>'
+      ? '<p class="note">Showing a saved analysis refreshed within the last 24 hours to reduce repeat API costs. New SEC filings may have appeared since it was saved.</p>'
       : ''}
 
     ${data.healthSummary
