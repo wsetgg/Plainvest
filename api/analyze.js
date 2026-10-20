@@ -1087,10 +1087,12 @@ async function addEventDetails(events) {
               const name = String(file?.name || "");
               const type = String(file?.type || "");
               const description = String(file?.description || "");
+              const exhibitName = /(?:dex99|ex(?:hibit)?[-_.]?99|99[-_.]?1|press|release|earnings|shareholder|investor)/i.test(name);
+              const exhibitType = /^EX-?99(?:\.|$)/i.test(type);
+              const exhibitDescription = /press release|news release|earnings release|shareholder letter|investor presentation|exhibit 99/i.test(description);
               return /\.(html?|txt)$/i.test(name) &&
                 !/\.(xhtml|xml)$/i.test(name) &&
-                (/^EX-?99(?:\.|$)/i.test(type) ||
-                 /press release|news release|earnings release|shareholder letter|investor presentation/i.test(description + " " + name));
+                (exhibitType || exhibitName || exhibitDescription);
             })
             .sort((a, b) => {
               const score = file => {
