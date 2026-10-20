@@ -541,9 +541,9 @@ function balance(facts) {
     "LiabilitiesNoncurrent"
   ]);
 
-  // Do not treat one debt component as total debt. Prefer the reported
-  // combined concept when present; otherwise combine current and non-current
-  // long-term debt only when both components are available for that date.
+  // Avoid treating a single debt component as total debt. Combine current
+  // and non-current components when available; use the generic long-term
+  // debt tag only as a fallback when a dedicated component is absent.
   const currentDebtMap = instantMap(facts, ["LongTermDebtCurrent"]);
   const noncurrentDebtMap = instantMap(facts, ["LongTermDebtNoncurrent"]);
   const reportedDebtMap = instantMap(facts, ["LongTermDebt"]);
