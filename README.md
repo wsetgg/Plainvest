@@ -1,15 +1,38 @@
-# Plainvest: deploy guide
+# Plainvest
 
-Files: `index.html` (the page) and `api/analyze.js` (the backend). No dependencies. Needs Node 18+.
+Plainvest explains US-listed companies' financial results and selected SEC announcements in plain English.
 
-## Deploy on Vercel (free)
-1. Put this folder in a GitHub repo, or install the Vercel CLI and run `vercel` inside the folder.
-2. In Vercel, open Project > Settings > Environment Variables and add:
-   - `SEC_USER_AGENT` = `Plainvest yourname@youremail.com` (required; the SEC blocks requests without a real contact)
-   - `ANTHROPIC_API_KEY` = your key from console.anthropic.com (optional; without it, summaries use built-in templates)
-3. Redeploy. Open your site and try AAPL, KO, or TSLA.
+## Files
 
-## Notes
-- Results are cached for 24 hours at Vercel's edge, which keeps you far below the SEC's 10 requests/second limit.
-- Foreign companies that file 20-F reports, and some banks and insurers, may show "can't analyze yet".
-- Thresholds (e.g. 10% margin = good) are rough and live in `analyzeFacts`. Adjust them as you learn.
+- `index.html` — homepage, company search, charts, and analysis report.
+- `api/analyze.js` — Vercel serverless API, SEC data processing, announcement retrieval, AI explanations, Redis caching, and rate limiting.
+- `api/analyze.test.js` — regression tests for core financial calculations.
+
+## Environment variables
+
+Configure these in Vercel Project Settings → Environment Variables:
+
+- `SEC_USER_AGENT` — required. Identify the app and provide a monitored contact email in line with SEC fair-access guidance.
+- `UPSTASH_REDIS_REST_URL` — required for shared analysis caching and daily limits.
+- `UPSTASH_REDIS_REST_TOKEN` — required for shared analysis caching and daily limits.
+- `ANTHROPIC_API_KEY` — optional. Enables AI-written company and announcement explanations; without it, the API uses fallback content.
+
+Redeploy after changing environment variables.
+
+## Behavior and limitations
+
+- Successful company analyses are cached in Upstash Redis for 24 hours. Cached results include a generation timestamp; new SEC filings can arrive while a result is cached.
+- The daily allowance applies to new analyses; a cache hit does not consume that allowance. Rate-limit and cache storage both depend on Upstash availability.
+- Financial data is derived from SEC Company Facts. Free cash flow is shown only when both operating cash flow and capital expenditures are available.
+- Recent announcements are selected from SEC submissions and linked filing exhibits. This is not a complete real-time news feed.
+- Some foreign issuers, ETFs/funds, banks, insurers, newly listed companies, and unusual reporting formats may not be supported reliably.
+- Financial ratios and simple status labels are educational heuristics, not sector-adjusted investment recommendations. Review original filings before relying on an interpretation.
+- AI explanations can be unavailable, incomplete, or wrong; the interface should make that limitation visible.
+
+## Regression tests
+
+With Node.js 18 or newer installed, run:
+
+```sh
+node --test api/analyze.test.js
+```
