@@ -20,6 +20,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const CLAUDE_TIMEOUT_MS = 20000;
 const EVENT_TIMEOUT_MS = 6000;
 
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -758,7 +759,6 @@ function analyzeFacts(facts) {
       `Sales were up about ${pct(now.salesYoY)} from the same quarter a year earlier.`
     );
   }
-    }
 
   if (
     incomeYearAgo != null &&
@@ -1099,32 +1099,6 @@ let fundAt = 0;
 async function isFund(ticker) {
   if (ETFS.has(ticker)) return true;
 
-  try {
-    if (!fundSet || Date.now() - fundAt > 7 * DAY) {
-      const response = await fetchWithTimeout(
-        "https://www.sec.gov/files/company_tickers_mf.json",
-        { headers: H() }
-      );
-
-      if (!response.ok) return false;
-
-      const data = await response.json();
-      const index = data.fields?.indexOf("symbol");
-
-      fundSet = new Set(
-        index >= 0
-          ? (data.data || []).map(row => String(row[index]).toUpperCase())
-          : []
-      );
-
-      fundAt = Date.now();
-    }
-
-    return fundSet.has(ticker);
-  } catch {
-    return false;
-  }
-}
   try {
     if (!fundSet || Date.now() - fundAt > 7 * DAY) {
       const response = await fetchWithTimeout(
