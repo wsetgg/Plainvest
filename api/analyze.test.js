@@ -64,8 +64,7 @@ test("current debt is added to LongTermDebt when non-current tag is absent", () 
     Liabilities: [factRow("2026-03-31", 500)],
     StockholdersEquity: [factRow("2026-03-31", 500)],
     LongTermDebtCurrent: [factRow("2026-03-31", 50)],
-    LongTermDebtNoncurrent: [factRow("2026-03-31", 250)],
-    LongTermDebt: [factRow("2026-03-31", 280)]
+    LongTermDebt: [factRow("2026-03-31", 250)]
   });
 
   const sheet = balanceSheetObject(facts);
