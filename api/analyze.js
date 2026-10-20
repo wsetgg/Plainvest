@@ -153,6 +153,37 @@ async function releaseDailyAnalysis(key) {
   await redisCommand(["EVAL", RELEASE_DAILY_SCRIPT, "1", key]);
 }
 
+// Cache successful company analyses for six hours. This avoids repeated
+// Claude calls while keeping the result fresh enough for a lightweight research tool.
+const ANALYSIS_CACHE_TTL_SECONDS = 6 * 60 * 60;
+
+async function getCachedAnalysis(ticker) {
+  try {
+    const cached = await redisCommand(["GET", `plainvest:analysis:v1:${ticker}`]);
+    if (typeof cached !== "string" || !cached) return null;
+    const parsed = JSON.parse(cached);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (error) {
+    console.error("Analysis cache read failed:", error.message);
+    return null;
+  }
+}
+
+async function setCachedAnalysis(ticker, result) {
+  try {
+    await redisCommand([
+      "SET",
+      `plainvest:analysis:v1:${ticker}`,
+      JSON.stringify(result),
+      "EX",
+      String(ANALYSIS_CACHE_TTL_SECONDS)
+    ]);
+  } catch (error) {
+    // A cache write should never turn a successful analysis into a failure.
+    console.error("Analysis cache write failed:", error.message);
+  }
+}
+
 const UA = () => process.env.SEC_USER_AGENT;
 
 const H = () => ({
@@ -661,12 +692,16 @@ function analyzeFacts(facts) {
   const rows = revenueQuarters.slice(0, 8).map(quarter => {
     const income = qAt(incomeQuarters, quarter.end);
     const yearAgo = yAgo(revenueQuarters, quarter.end);
+    const previousQuarterSales = qAt(revenueQuarters, quarter.end, 90);
 
     return {
       end: quarter.end,
       sales: quarter.val,
       salesYoY: yearAgo != null && yearAgo !== 0
         ? quarter.val / yearAgo - 1
+        : null,
+      salesQoQ: previousQuarterSales != null && previousQuarterSales !== 0
+        ? quarter.val / previousQuarterSales - 1
         : null,
       profit: income ?? null,
       margin: income != null && quarter.val !== 0
@@ -949,6 +984,43 @@ function analyzeFacts(facts) {
       ? `The main changes were: ${signals.slice(0, 3).map(signal => `${signal.title.toLowerCase()} — ${signal.text}`).join(" ")}`
       : "There were no major changes in the tracked figures compared with the same period a year earlier.");
 
+  const needsAttention = checks.filter(check => check.status === "bad");
+  const cautionAreas = checks.filter(check => check.status === "warn");
+  const strongAreas = checks.filter(check => check.status === "good");
+
+  let healthSummary;
+  if (needsAttention.length >= 2) {
+    healthSummary = `Several tracked indicators need attention: ${needsAttention.map(check => check.title.toLowerCase()).join(", ")}. `;
+  } else if (needsAttention.length === 1) {
+    healthSummary = `One tracked indicator needs attention: ${needsAttention[0].title.toLowerCase()}. `;
+  } else if (cautionAreas.length) {
+    healthSummary = `Some tracked indicators deserve a closer look: ${cautionAreas.map(check => check.title.toLowerCase()).join(", ")}. `;
+  } else if (strongAreas.length) {
+    healthSummary = `The available indicators look relatively steady in these areas: ${strongAreas.map(check => check.title.toLowerCase()).join(", ")}. `;
+  } else {
+    healthSummary = "There is not enough reported data to summarize the company's financial health confidently. ";
+  }
+  healthSummary += "This is a limited screen of reported figures, not a complete assessment; industry norms and one-off events can change what these numbers mean.";
+
+  const watchNext = [];
+  if (checks.some(check => check.title === "Growth" && ["bad", "warn"].includes(check.status))) {
+    watchNext.push("Check whether revenue growth improves or continues to weaken in the next quarterly report.");
+  } else {
+    watchNext.push("Compare next quarter's revenue with the same quarter a year earlier to see whether growth is holding up.");
+  }
+  if (checks.some(check => check.title === "Profit" && ["bad", "warn"].includes(check.status))) {
+    watchNext.push("See whether profit margins improve, or whether costs continue to pressure earnings.");
+  }
+  if (checks.some(check => check.title === "Cash" && ["bad", "warn"].includes(check.status))) {
+    watchNext.push("Check whether free cash flow improves and whether the company needs additional funding.");
+  }
+  if (checks.some(check => check.title === "Debt" && ["bad", "warn"].includes(check.status))) {
+    watchNext.push("Look for changes in debt, interest costs, and the company's ability to meet obligations.");
+  }
+  if (watchNext.length < 3) {
+    watchNext.push("Compare management's stated outlook, if provided, with the results in the next report.");
+  }
+
   return {
     fiscalYearEnd: now.end,
     periodLabel: `Latest quarter ended ${now.end}`,
@@ -958,7 +1030,9 @@ function analyzeFacts(facts) {
     signals,
     checks,
     risks,
-    summary
+    summary,
+    healthSummary,
+    watchNext: watchNext.slice(0, 3)
   };
 }
 
@@ -1340,6 +1414,13 @@ ${JSON.stringify(eventInputs)}`;
     }
 
     const data = await response.json();
+    console.info("Claude token usage:", {
+      model: CLAUDE_MODEL,
+      inputTokens: Number(data.usage?.input_tokens || 0),
+      outputTokens: Number(data.usage?.output_tokens || 0),
+      stopReason: data.stop_reason || "unknown"
+    });
+
     const raw = Array.isArray(data.content)
       ? data.content.filter(block => block && block.type === "text")
           .map(block => block.text || "").join("").trim()
@@ -1453,7 +1534,7 @@ async function handler(req, res) {
       );
     }
 
-    // Reserve one of the visitor's three daily analyses.
+    // Reserve one of the visitor's daily analyses.
     const reservation = await reserveDailyAnalysis(req);
 
     if (!reservation.allowed) {
@@ -1464,6 +1545,14 @@ async function handler(req, res) {
     }
 
     dailyReservationKey = reservation.key;
+
+    const cachedAnalysis = await getCachedAnalysis(ticker);
+    if (cachedAnalysis) {
+      // A cache hit still counts toward the visitor's daily usage limit.
+      dailyReservationKey = null;
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ ...cachedAnalysis, cached: true });
+    }
 
     const cik = String(company.cik_str).padStart(10, "0");
 
@@ -1533,17 +1622,20 @@ async function handler(req, res) {
       ticker
     });
 
+    const result = {
+      ticker,
+      name: company.title,
+      ...out,
+      ...(ai || {})
+    };
+
+    await setCachedAnalysis(ticker, result);
     res.setHeader("Cache-Control", "no-store");
 
     // A successful financial analysis consumes one daily allowance.
     dailyReservationKey = null;
 
-    res.status(200).json({
-      ticker,
-      name: company.title,
-      ...out,
-      ...(ai || {})
-    });
+    res.status(200).json(result);
   } catch (error) {
     if (dailyReservationKey) {
       try {
