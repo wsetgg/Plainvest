@@ -15,9 +15,9 @@ class HttpError extends Error {
 
 const DAY = 864e5;
 const DAILY_ANALYSIS_LIMIT = 3;
-const CLAUDE_MODEL = "claude-haiku-5-5";
+const CLAUDE_MODEL = "claude-haiku-4-5";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
-const CLAUDE_TIMEOUT_MS = 18000;
+const CLAUDE_TIMEOUT_MS = 25000;
 const EVENT_TIMEOUT_MS = 6000;
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
@@ -985,7 +985,6 @@ function eventsFrom(submissions, cik) {
   const recent = submissions?.filings?.recent;
   if (!recent?.form) return [];
 
-  const rank = { negative: 0, watch: 1, event: 2 };
   const cutoff = Date.now() - 365 * DAY;
   const output = [];
 
@@ -997,13 +996,19 @@ function eventsFrom(submissions, cik) {
       continue;
     }
 
-    const hit = String(recent.items?.[i] || "")
+    const matchingItems = String(recent.items?.[i] || "")
       .split(",")
       .map(value => value.trim())
-      .filter(value => ITEMS[value])
-      .sort((a, b) => rank[ITEMS[a][0]] - rank[ITEMS[b][0]])[0];
+      .filter(value => ITEMS[value]);
 
-    if (!hit) continue;
+    if (!matchingItems.length) continue;
+
+    // Prefer the most significant recognized item, but keep announcements
+    // ordered by date below so old negative events do not hide newer filings.
+    const rank = { negative: 0, watch: 1, event: 2 };
+    const hit = matchingItems.sort((a, b) =>
+      rank[ITEMS[a][0]] - rank[ITEMS[b][0]]
+    )[0];
 
     const accession = String(recent.accessionNumber[i] || "").replace(/-/g, "");
     const document = recent.primaryDocument?.[i];
@@ -1012,6 +1017,8 @@ function eventsFrom(submissions, cik) {
       date: recent.filingDate[i],
       kind: ITEMS[hit][0],
       title: ITEMS[hit][1],
+      form: recent.form[i],
+      accessionNumber: recent.accessionNumber[i] || null,
       url: document
         ? `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession}/${document}`
         : null
@@ -1019,11 +1026,32 @@ function eventsFrom(submissions, cik) {
   }
 
   return output
-    .sort((a, b) =>
-      rank[a.kind] - rank[b.kind] ||
-      b.date.localeCompare(a.date)
-    )
+    .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
+}
+
+function filingTextToPlainText(source) {
+  return String(source || "")
+    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<!--[\\s\\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\\d+);/g, (_, value) => {
+      const code = Number(value);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : " ";
+    })
+    .replace(/&#x([\\da-f]+);/gi, (_, value) => {
+      const code = parseInt(value, 16);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : " ";
+    })
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\\s+/g, " ")
+    .trim();
 }
 
 async function addEventDetails(events) {
@@ -1031,45 +1059,86 @@ async function addEventDetails(events) {
     if (!event.url) return { ...event, details: null };
 
     try {
-      const response = await fetchWithTimeout(event.url, {
-        headers: {
-          "User-Agent": UA(),
-          Accept: "text/html, text/plain, application/xhtml+xml"
+      const headers = {
+        "User-Agent": UA(),
+        Accept: "application/json, text/html, text/plain, application/xhtml+xml"
+      };
+      const baseUrl = event.url.slice(0, event.url.lastIndexOf("/") + 1);
+      let sourceUrl = event.url;
+      let sourceLabel = "8-K filing";
+
+      // The 8-K itself often contains only a cover page. The useful explanation
+      // is frequently in an attached exhibit, such as a press release (EX-99.1).
+      try {
+        const indexResponse = await fetchWithTimeout(
+          baseUrl + "index.json",
+          { headers },
+          EVENT_TIMEOUT_MS
+        );
+
+        if (indexResponse.ok) {
+          const indexData = await indexResponse.json();
+          const files = Array.isArray(indexData?.directory?.item)
+            ? indexData.directory.item
+            : [];
+
+          const candidates = files
+            .filter(file => {
+              const name = String(file?.name || "");
+              const type = String(file?.type || "");
+              const description = String(file?.description || "");
+              return /\\.(html?|txt)$/i.test(name) &&
+                !/\\.(xhtml|xml)$/i.test(name) &&
+                (/^EX-?99(?:\\.|$)/i.test(type) ||
+                 /press release|news release|earnings release|shareholder letter|investor presentation/i.test(description + " " + name));
+            })
+            .sort((a, b) => {
+              const score = file => {
+                const type = String(file?.type || "").toUpperCase();
+                const text = String(file?.description || "") + " " + String(file?.name || "");
+                let points = 0;
+                if (type === "EX-99.1") points += 100;
+                else if (/^EX-?99/i.test(type)) points += 80;
+                if (/press release|news release|earnings release/i.test(text)) points += 40;
+                if (/\\.htm?$/i.test(String(file?.name || ""))) points += 10;
+                return points;
+              };
+              return score(b) - score(a);
+            });
+
+          const exhibit = candidates.find(file =>
+            String(file?.name || "") !== event.url.slice(event.url.lastIndexOf("/") + 1)
+          );
+
+          if (exhibit?.name) {
+            sourceUrl = baseUrl + encodeURIComponent(exhibit.name);
+            sourceLabel = String(exhibit.description || exhibit.type || exhibit.name).slice(0, 120);
+          }
         }
-      }, EVENT_TIMEOUT_MS);
+      } catch (error) {
+        console.error("SEC filing index error:", error.message);
+      }
+
+      let response = await fetchWithTimeout(sourceUrl, { headers }, EVENT_TIMEOUT_MS);
+
+      // If an exhibit could not be fetched, fall back to the original 8-K document.
+      if (!response.ok && sourceUrl !== event.url) {
+        sourceUrl = event.url;
+        sourceLabel = "8-K filing";
+        response = await fetchWithTimeout(sourceUrl, { headers }, EVENT_TIMEOUT_MS);
+      }
 
       if (!response.ok) return { ...event, details: null };
 
       const source = await response.text();
+      const details = filingTextToPlainText(source).slice(0, 10000);
 
-      const details = source
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-        .replace(/<!--[\s\S]*?-->/g, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&#(\d+);/g, (_, value) => {
-          const code = Number(value);
-          return code > 0 && code <= 0x10ffff
-            ? String.fromCodePoint(code)
-            : " ";
-        })
-        .replace(/&#x([\da-f]+);/gi, (_, value) => {
-          const code = parseInt(value, 16);
-          return code > 0 && code <= 0x10ffff
-            ? String.fromCodePoint(code)
-            : " ";
-        })
-        .replace(/&nbsp;|&#160;/gi, " ")
-        .replace(/&amp;/gi, "&")
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;|&apos;/gi, "'")
-        .replace(/&lt;/gi, "<")
-        .replace(/&gt;/gi, ">")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 8000);
-
-      return { ...event, details: details || null };
+      return {
+        ...event,
+        details: details || null,
+        detailsSource: details ? sourceLabel : null,
+        detailsUrl: details ? sourceUrl : null
+      };
     } catch (error) {
       console.error("SEC filing detail error:", error.message);
       return { ...event, details: null };
@@ -1137,71 +1206,57 @@ function fallbackDescription(name, industry) {
 
 async function aiWrite(name, out, companyInfo = {}) {
   const key = process.env.ANTHROPIC_API_KEY;
-
-  const fallback = fallbackDescription(
-    name,
-    companyInfo.industry || null
-  );
+  const fallback = fallbackDescription(name, companyInfo.industry || null);
 
   if (!key) {
-    return {
-      companyDescription: fallback,
-      aiAvailable: false
-    };
+    return { companyDescription: fallback, aiAvailable: false };
   }
 
   try {
-    const formatMoney = value =>
-      value == null ? "n/a" : money(value);
+    const formatMoney = value => value == null ? "n/a" : money(value);
+    const quarterData = (out.quarters || []).slice(0, 8).map(quarter =>
+      `Quarter ending ${quarter.end}: revenue ${formatMoney(quarter.sales)}, year-over-year change ${quarter.salesYoY == null ? "n/a" : (quarter.salesYoY * 100).toFixed(0) + "%"}, net profit/loss ${formatMoney(quarter.profit)}, free cash flow ${formatMoney(quarter.cash)}`
+    ).join("\\n");
 
-    const quarterData = out.quarters.map(quarter =>
-      `Quarter ending ${quarter.end}: revenue ${formatMoney(quarter.sales)}, year-over-year change ${
-        quarter.salesYoY == null
-          ? "n/a"
-          : (quarter.salesYoY * 100).toFixed(0) + "%"
-      }, net profit/loss ${formatMoney(quarter.profit)}, free cash flow ${formatMoney(quarter.cash)}`
-    ).join("\n");
-
-    const signalData = out.signals
+    const signalData = (out.signals || [])
       .map(signal => `${signal.kind}: ${signal.title}. ${signal.text}`)
-      .join("\n") || "No major changes identified.";
+      .join("\\n") || "No major changes identified.";
 
-    // Send only the five newest announcements to the AI and keep each filing
-    // excerpt short. The full event list remains available to the app.
+    // The source text now prefers the filing's attached exhibit, where the
+    // actual announcement is usually described, instead of only the 8-K cover.
     const eventInputs = (out.events || []).slice(0, 5).map((event, index) => ({
       index,
       date: event.date || "Unknown date",
       title: event.title || "Untitled filing",
+      form: event.form || "8-K",
       category: event.kind || "event",
+      source: event.detailsSource || "SEC filing",
       filingDetails: typeof event.details === "string"
-        ? event.details.slice(0, 1000)
+        ? event.details.slice(0, 3500)
         : null
     }));
 
-    const prompt = `You are Plainvest, explaining company financials to a beginner.
-Use only the supplied facts. Never invent details, causes, products, or figures. Do not give investment advice or predict stock prices.
-Return ONLY valid JSON (no markdown or text outside it), using exactly these keys:
-{
-  "companyDescription": "1-2 simple sentences describing the business, only if supported",
-  "summary": "about 4 concise sentences explaining the latest results and important changes",
-  "risks": ["up to 3 concise risks supported by the data"],
-  "eventAnalyses": [{
-    "index": 0,
-    "whatHappened": "1 concise sentence based on the filing details",
-    "whyItMatters": "1 concise sentence explaining business relevance",
-    "potentialImpact": "1 concise sentence about possible business effects, not share price",
-    "uncertainty": "1 concise sentence stating what is unknown or unproven"
-  }]
-}
+    const prompt = `You are Plainvest. Explain a public company's financial results and SEC announcements to an everyday investor who is new to finance.
+Use clear, specific, plain English. Do not give investment advice or predict the stock price.
+Do not merely repeat an announcement title. Read the supplied filing text and explain the actual action or disclosure, why it matters to the business, a plausible business consequence, and what remains unknown.
+Never invent an event, financial figure, customer, product, cause, or outcome. If the filing text is missing or does not contain enough detail, say that plainly rather than guessing.
 
-Rules:
-- Describe the company's actual business only when supported by the company name and SEC industry classification below. An industry label alone does not prove specific products, customers, or services; otherwise say information is insufficient.
-- Start the summary with latest-quarter revenue and year-over-year change, plus profit/loss if available. Explain the most important changes and why they matter. If the data does not establish a cause, say so.
-- Explain each supplied announcement beyond simply repeating its title. Do not infer details from a title alone. If filing details are limited, say so.
-- Return one eventAnalyses item per supplied announcement, preserving its index. If there are no announcements, use an empty array.
-- Keep every field brief so the response remains valid JSON.
+Company description:
+- For a widely known company, use reliable general knowledge to explain its main business in one or two plain-English sentences.
+- For a less familiar company, describe only what can be supported by its name and SEC industry classification. Be transparent if that is not enough to identify its actual products or services.
+- Do not just restate the SEC industry label when the business is reasonably identifiable.
+
+Return one JSON object with exactly these fields:
+- companyDescription: string, one or two plain-English sentences.
+- summary: string, around four concise sentences about the latest results and the most important changes.
+- risks: array of up to three concise, data-supported risk strings.
+- eventAnalyses: array with one object for every supplied announcement, preserving its index. Each object must contain index (integer), whatHappened, whyItMatters, potentialImpact, uncertainty (all strings).
+
+Start the summary with latest-quarter revenue and year-over-year change, plus profit/loss if available. Explain what changed and why it matters; if the data does not establish a cause, say so.
+For each event, write one specific sentence per field. The potential impact should discuss business operations or finances, not stock price. If no events are supplied, return an empty eventAnalyses array.
 
 COMPANY: ${name}
+TICKER: ${companyInfo.ticker || "Unknown"}
 SEC INDUSTRY: ${companyInfo.industry || "Not available"}
 SEC SIC CODE: ${companyInfo.sic || "Not available"}
 
@@ -1211,8 +1266,34 @@ ${quarterData}
 IMPORTANT CHANGES:
 ${signalData}
 
-UP TO FIVE RECENT ANNOUNCEMENTS (details may be incomplete):
+RECENT SEC ANNOUNCEMENTS:
 ${JSON.stringify(eventInputs)}`;
+
+    const schema = {
+      type: "object",
+      properties: {
+        companyDescription: { type: "string" },
+        summary: { type: "string" },
+        risks: { type: "array", items: { type: "string" } },
+        eventAnalyses: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              index: { type: "integer" },
+              whatHappened: { type: "string" },
+              whyItMatters: { type: "string" },
+              potentialImpact: { type: "string" },
+              uncertainty: { type: "string" }
+            },
+            required: ["index", "whatHappened", "whyItMatters", "potentialImpact", "uncertainty"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["companyDescription", "summary", "risks", "eventAnalyses"],
+      additionalProperties: false
+    };
 
     const response = await fetchWithTimeout(
       "https://api.anthropic.com/v1/messages",
@@ -1225,7 +1306,13 @@ ${JSON.stringify(eventInputs)}`;
         },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 2400,
+          max_tokens: 3000,
+          output_config: {
+            format: {
+              type: "json_schema",
+              schema
+            }
+          },
           messages: [{ role: "user", content: prompt }]
         })
       },
@@ -1235,59 +1322,33 @@ ${JSON.stringify(eventInputs)}`;
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Claude API error:", response.status, errorText);
-
-      return {
-        companyDescription: fallback,
-        aiAvailable: false
-      };
+      return { companyDescription: fallback, aiAvailable: false };
     }
 
     const data = await response.json();
-
     const raw = Array.isArray(data.content)
-      ? data.content
-          .filter(block => block && block.type === "text")
-          .map(block => block.text || "")
-          .join("")
-          .trim()
+      ? data.content.filter(block => block && block.type === "text")
+          .map(block => block.text || "").join("").trim()
       : "";
 
-    if (!raw) {
-      return {
-        companyDescription: fallback,
-        aiAvailable: false
-      };
+    if (!raw || data.stop_reason === "max_tokens") {
+      console.error("Claude response incomplete or empty.", {
+        stopReason: data.stop_reason || "unknown",
+        responseLength: raw.length
+      });
+      return { companyDescription: fallback, aiAvailable: false };
     }
 
     let parsed;
-
     try {
-      // Strip optional markdown fences and any accidental text around the JSON.
-      let cleaned = raw
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/, "")
-        .trim();
-      const firstBrace = cleaned.indexOf("{");
-      const lastBrace = cleaned.lastIndexOf("}");
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-      }
-      parsed = JSON.parse(cleaned);
-    } catch {
-      console.error("Claude returned invalid JSON.", {
-        stopReason: data.stop_reason || "unknown",
-        responseLength: raw.length,
-        responseEnding: raw.slice(-250)
-      });
-      return {
-        companyDescription: fallback,
-        aiAvailable: false
-      };
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      console.error("Claude returned invalid JSON despite structured output.", error.message);
+      return { companyDescription: fallback, aiAvailable: false };
     }
 
     const companyDescription =
-      typeof parsed.companyDescription === "string" &&
-      parsed.companyDescription.trim()
+      typeof parsed.companyDescription === "string" && parsed.companyDescription.trim()
         ? parsed.companyDescription.trim().slice(0, 700)
         : fallback;
 
@@ -1299,29 +1360,14 @@ ${JSON.stringify(eventInputs)}`;
 
     const events = (out.events || []).map((event, index) => {
       const analysis = analyses.get(index);
-
       return {
         ...event,
-        explanation: analysis
-          ? {
-              whatHappened: String(
-                analysis.whatHappened ||
-                "The filing text does not provide enough information to explain this announcement."
-              ),
-              whyItMatters: String(
-                analysis.whyItMatters ||
-                "Its importance cannot be determined from the available filing details."
-              ),
-              potentialImpact: String(
-                analysis.potentialImpact ||
-                "The business impact is unclear from the available information."
-              ),
-              uncertainty: String(
-                analysis.uncertainty ||
-                "The available information does not establish the full implications."
-              )
-            }
-          : null
+        explanation: analysis ? {
+          whatHappened: String(analysis.whatHappened || "The filing text does not provide enough information to explain this announcement."),
+          whyItMatters: String(analysis.whyItMatters || "Its importance cannot be determined from the available filing details."),
+          potentialImpact: String(analysis.potentialImpact || "The business impact is unclear from the available information."),
+          uncertainty: String(analysis.uncertainty || "The available information does not establish the full implications.")
+        } : null
       };
     });
 
@@ -1338,11 +1384,7 @@ ${JSON.stringify(eventInputs)}`;
     };
   } catch (error) {
     console.error("Claude aiWrite failed:", error.message);
-
-    return {
-      companyDescription: fallback,
-      aiAvailable: false
-    };
+    return { companyDescription: fallback, aiAvailable: false };
   }
 }
 
@@ -1473,7 +1515,8 @@ async function handler(req, res) {
 
     const ai = await aiWrite(company.title, out, {
       industry: submissions?.sicDescription || null,
-      sic: submissions?.sic || null
+      sic: submissions?.sic || null,
+      ticker
     });
 
     res.setHeader("Cache-Control", "no-store");
