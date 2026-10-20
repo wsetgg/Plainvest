@@ -15,7 +15,7 @@ class HttpError extends Error {
 
 const DAY = 864e5;
 const DAILY_ANALYSIS_LIMIT = 3;
-const CLAUDE_MODEL = "claude-haiku-4-5";
+const CLAUDE_MODEL = "claude-haiku-5-5";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const CLAUDE_TIMEOUT_MS = 25000;
 const EVENT_TIMEOUT_MS = 6000;
