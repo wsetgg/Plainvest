@@ -1691,3 +1691,4 @@ async function handler(req, res) {
 module.exports = handler;
 module.exports.analyzeFacts = analyzeFacts;
 module.exports.eventsFrom = eventsFrom;
+module.exports.balanceSheetObject = balanceSheetObject;
