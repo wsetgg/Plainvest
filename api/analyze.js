@@ -14,7 +14,7 @@ class HttpError extends Error {
 }
 
 const DAY = 864e5;
-const DAILY_ANALYSIS_LIMIT = 3;
+const DAILY_ANALYSIS_LIMIT = 50;
 const CLAUDE_MODEL = "claude-haiku-5-5";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 const CLAUDE_TIMEOUT_MS = 25000;
@@ -1459,7 +1459,7 @@ async function handler(req, res) {
     if (!reservation.allowed) {
       throw new HttpError(
         429,
-        "You've reached today's limit of 3 company analyses. Your limit resets at midnight UTC."
+        "You've reached today's limit of 50 company analyses. Your limit resets at midnight UTC."
       );
     }
 
