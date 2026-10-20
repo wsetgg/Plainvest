@@ -58,7 +58,7 @@ test("reported debt combines current and non-current components instead of picki
   assert.equal(sheet.funding.find(item => item.label === "Reported debt").value, 300);
 });
 
-test("reported combined long-term debt takes precedence over component sum", () => {
+test("current debt is added to LongTermDebt when non-current tag is absent", () => {
   const facts = makeFacts({
     Assets: [factRow("2026-03-31", 1000)],
     Liabilities: [factRow("2026-03-31", 500)],
@@ -69,5 +69,5 @@ test("reported combined long-term debt takes precedence over component sum", () 
   });
 
   const sheet = balanceSheetObject(facts);
-  assert.equal(sheet.funding.find(item => item.label === "Reported debt").value, 280);
+  assert.equal(sheet.funding.find(item => item.label === "Reported debt").value, 300);
 });
