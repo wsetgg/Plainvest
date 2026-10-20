@@ -758,6 +758,7 @@ function render(data) {
       <td>${esc(quarterName(quarter.end))}</td>
       <td>${money(quarter.sales)}</td>
       <td class="${sign(quarter.salesYoY)}">${pct(quarter.salesYoY)}</td>
+      <td class="${sign(quarter.salesQoQ)}">${pct(quarter.salesQoQ)}</td>
       <td class="${sign(quarter.profit)}">${money(quarter.profit)}</td>
       <td>${quarter.margin == null || !Number.isFinite(Number(quarter.margin))
         ? '–'
@@ -813,6 +814,17 @@ function render(data) {
       : ''}
 
     <p class="summary">${esc(data.summary || 'Analysis completed, but a summary was not returned.')}</p>
+    ${data.cached
+      ? '<p class="note">Showing a saved analysis from the last 6 hours to reduce repeat API costs. New SEC filings may have appeared since it was saved.</p>'
+      : ''}
+
+    ${data.healthSummary
+      ? `<div class="bs-card"><h3>Overall financial picture</h3><p>${esc(data.healthSummary)}</p></div>`
+      : ''}
+
+    ${Array.isArray(data.watchNext) && data.watchNext.length
+      ? `<div class="bs-card" style="margin-top:14px"><h3>What to watch next</h3><ul>${data.watchNext.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>`
+      : ''}
 
     <h3 class="sec">Revenue and profit · latest ${quarters.length} quarters</h3>
     <div class="chart-card">
@@ -830,8 +842,8 @@ function render(data) {
     <h3 class="sec">Quarter-by-quarter figures · newest first</h3>
     <div class="tw">
       <table class="qt">
-        <thead><tr><th>Quarter</th><th>Revenue</th><th>vs year ago</th><th>Profit / loss</th><th>Margin</th><th>Free cash flow</th></tr></thead>
-        <tbody>${table || '<tr><td colspan="6">No quarterly figures available.</td></tr>'}</tbody>
+        <thead><tr><th>Quarter</th><th>Revenue</th><th>vs year ago</th><th>vs previous quarter</th><th>Profit / loss</th><th>Margin</th><th>Free cash flow</th></tr></thead>
+        <tbody>${table || '<tr><td colspan="7">No quarterly figures available.</td></tr>'}</tbody>
       </table>
     </div>
 
