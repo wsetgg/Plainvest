@@ -687,10 +687,19 @@ function renderEvents(data) {
         ? event.filingText.trim()
         : '';
 
-    const link = typeof event.url === 'string' &&
-      event.url.startsWith('https://www.sec.gov/')
-        ? ` · <a href="${esc(event.url)}" target="_blank" rel="noopener noreferrer">Read the filing</a>`
-        : '';
+    const sourceUrl = typeof event.detailsUrl === 'string' &&
+      event.detailsUrl.startsWith('https://www.sec.gov/')
+        ? event.detailsUrl
+        : typeof event.url === 'string' &&
+          event.url.startsWith('https://www.sec.gov/')
+          ? event.url
+          : '';
+    const sourceLabel = sourceUrl && sourceUrl === event.detailsUrl
+      ? 'Read announcement details'
+      : 'Read the filing';
+    const link = sourceUrl
+      ? ` · <a href="${esc(sourceUrl)}" target="_blank" rel="noopener noreferrer">${sourceLabel}</a>`
+      : '';
 
     const hasStructuredExplanation = Boolean(what || why || impact || uncertain);
 
@@ -799,6 +808,9 @@ function render(data) {
     ${description
       ? `<p class="about">${esc(description)}</p>`
       : '<p class="note">A plain-English company description is not available right now. Financial figures below are from SEC filings.</p>'}
+    ${data.aiAvailable === false
+      ? '<p class="note">AI explanations are currently unavailable for this request, so the description above may be a basic fallback and announcement details may be limited. Check the Vercel function logs for the specific Claude API error.</p>'
+      : ''}
 
     <p class="summary">${esc(data.summary || 'Analysis completed, but a summary was not returned.')}</p>
 
