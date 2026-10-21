@@ -287,14 +287,26 @@ async function lookup(ticker) {
     tickerAt = Date.now();
   }
 
-  const matches = tickerMap.get(ticker) || [];
+  const query = String(ticker || "").trim().toUpperCase();
+  const tickerMatches = tickerMap.get(query) || [];
+  let matches = tickerMatches;
+
+  // If no ticker matches, allow an exact company-name search against the SEC
+  // issuer list. This helps users find international issuers by company name
+  // without guessing which U.S.-listed ticker maps to the issuer.
+  if (!matches.length && query.length >= 2) {
+    matches = [...tickerMap.values()].flat().filter(company =>
+      company.title.trim().toUpperCase() === query
+    );
+  }
+
   if (matches.length > 1) {
     const options = matches
-      .map(company => `${company.title}${company.exchange ? ` (${company.exchange})` : ""}`)
+      .map(company => `${company.title}${company.ticker ? ` [${company.ticker}]` : ""}${company.exchange ? ` (${company.exchange})` : ""}`)
       .join("; ");
     throw new HttpError(
       409,
-      `The ticker ${ticker} matches more than one SEC issuer: ${options}. Plainvest needs an unambiguous company/exchange selection before analyzing it.`
+      `"${query}" matches more than one SEC issuer: ${options}. Search by the company's exact ticker to avoid analyzing the wrong company.`
     );
   }
 
@@ -1591,36 +1603,33 @@ async function handler(req, res) {
       );
     }
 
-    const raw = String(req.query?.ticker || "")
-      .trim()
-      .toUpperCase();
+    const raw = String(req.query?.ticker || "").trim().toUpperCase();
 
-    if (FOREIGN.test(raw)) {
-      throw new HttpError(422, FOREIGN_MSG);
+    // Accept a ticker or company name. Search is limited to SEC-listed issuers,
+    // because financial analysis still depends on SEC filings and company facts.
+    if (!raw || raw.length > 100 || !/[A-Z0-9]/.test(raw) || /[<>]/.test(raw)) {
+      throw new HttpError(400, "Enter a ticker (like AAPL) or a company name (like Enbridge Inc.).");
     }
 
-    const ticker = raw.replace(".", "-");
-
-    if (!/^[A-Z0-9-]{1,8}$/.test(ticker)) {
-      throw new HttpError(400, "Enter a valid ticker, like AAPL.");
-    }
-
-    if (ETFS.has(ticker)) {
+    const tickerInput = raw.replace(".", "-");
+    if (ETFS.has(tickerInput)) {
       throw new HttpError(422, ETF_MSG);
     }
 
-    const company = await lookup(ticker);
+    const company = await lookup(raw);
 
     if (!company) {
-      if (await isFund(ticker)) {
+      if (/^[A-Z0-9-]{1,12}$/.test(tickerInput) && await isFund(tickerInput)) {
         throw new HttpError(422, ETF_MSG);
       }
 
       throw new HttpError(
         404,
-        `No SEC-listed company found for ${ticker}. Plainvest supports U.S.-listed companies that file with the SEC, including eligible international issuers. Stocks listed only on foreign exchanges are not supported yet; check the ticker and exchange. ETFs and funds aren't supported yet.`
+        `No SEC-listed issuer matched "${raw}". Try the company's U.S.-listed ticker or its exact company name. Plainvest can search international companies that file with the SEC; companies listed only on foreign exchanges still need a separate market-data source.`
       );
     }
+
+    const ticker = company.ticker || tickerInput;
 
     // Reuse a shared saved result before reserving an expensive fresh analysis.
     // Cache hits do not consume the daily allowance because they do not call the
