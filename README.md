@@ -1,6 +1,6 @@
 # Plainvest
 
-Plainvest explains US-listed companies' financial results and selected SEC announcements in plain English.
+Plainvest explains financial results and selected SEC announcements for U.S.-listed companies, including eligible international issuers that file with the SEC, in plain English.
 
 ## Files
 
@@ -25,7 +25,9 @@ Redeploy after changing environment variables.
 - The daily allowance applies to new analyses; a cache hit does not consume that allowance. Rate-limit and cache storage both depend on Upstash availability.
 - Financial data is derived from SEC Company Facts. Free cash flow is shown only when both operating cash flow and capital expenditures are available.
 - Recent announcements are selected from SEC submissions and linked filing exhibits. This is not a complete real-time news feed.
-- Some foreign issuers, ETFs/funds, banks, insurers, newly listed companies, and unusual reporting formats may not be supported reliably.
+- Initial international support covers eligible U.S.-listed foreign issuers with standardized USD facts available through SEC Company Facts. Plainvest recognizes selected IFRS concepts and Forms 20-F, 40-F, and 6-K, but international reporting coverage is not complete.
+- Stocks listed only on foreign exchanges (for example, a Toronto-only or London-only listing) are not supported yet. Other currencies and non-standardized reporting may still result in unavailable figures.
+- ETFs/funds, banks, insurers, newly listed companies, and unusual reporting formats may not be supported reliably.
 - Financial ratios and simple status labels are educational heuristics, not sector-adjusted investment recommendations. Review original filings before relying on an interpretation.
 - AI explanations can be unavailable, incomplete, or wrong; the interface should make that limitation visible.
 
