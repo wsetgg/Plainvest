@@ -166,3 +166,21 @@ test("ticker index ignores malformed rows and normalizes symbols", () => {
   assert.equal(index.has("XYZ"), false);
   assert.equal(index.has("DEF"), false);
 });
+
+test("exact company-name queries resolve to SEC-listed international issuers", () => {
+  const { buildTickerIndex } = require("./analyze.js");
+  const index = buildTickerIndex({
+    fields: ["cik", "name", "ticker", "exchange"],
+    data: [
+      [1234, "Enbridge Inc.", "ENB", "NYSE"],
+      [2345, "Example Defense Corp", "ABC", "NYSE"]
+    ]
+  });
+
+  const byName = [...index.values()].flat().filter(company =>
+    company.title.toUpperCase() === "ENBRIDGE INC."
+  );
+  assert.equal(byName.length, 1);
+  assert.equal(byName[0].ticker, "ENB");
+  assert.equal(byName[0].cik_str, 1234);
+});
