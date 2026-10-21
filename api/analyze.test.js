@@ -131,3 +131,38 @@ test("Form 6-K announcements are retained even without 8-K item codes", () => {
   assert.equal(events[0].title, "International company update");
   assert.match(events[0].url, /sec\.gov\/Archives\/edgar\/data\/1234567/);
 });
+
+
+test("ticker index preserves duplicate symbols instead of overwriting an issuer", () => {
+  const { buildTickerIndex } = require("./analyze.js");
+  const index = buildTickerIndex({
+    fields: ["cik", "name", "ticker", "exchange"],
+    data: [
+      [1001, "Example Defense Corp", "ABC", "NYSE"],
+      [2002, "Example Canadian Holdings", "ABC", "TSX"]
+    ]
+  });
+
+  const matches = index.get("ABC");
+  assert.equal(matches.length, 2);
+  assert.equal(matches[0].title, "Example Defense Corp");
+  assert.equal(matches[1].title, "Example Canadian Holdings");
+  assert.equal(matches[0].exchange, "NYSE");
+  assert.equal(matches[1].exchange, "TSX");
+});
+
+test("ticker index ignores malformed rows and normalizes symbols", () => {
+  const { buildTickerIndex } = require("./analyze.js");
+  const index = buildTickerIndex({
+    fields: ["cik", "name", "ticker", "exchange"],
+    data: [
+      [1001, "Example Corp", "abc", "NYSE"],
+      [null, "Missing CIK", "XYZ", "NASDAQ"],
+      [1002, "", "DEF", "NYSE"]
+    ]
+  });
+
+  assert.equal(index.get("ABC")[0].title, "Example Corp");
+  assert.equal(index.has("XYZ"), false);
+  assert.equal(index.has("DEF"), false);
+});
