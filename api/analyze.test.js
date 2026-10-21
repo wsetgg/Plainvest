@@ -73,22 +73,26 @@ test("current debt is added to LongTermDebt when non-current tag is absent", () 
 
 
 test("international IFRS facts reported in USD can produce quarterly analysis", () => {
+  const foreignQuarter = (end, start, value) => ({
+    ...durationFact(end, start, value),
+    form: "6-K"
+  });
   const ifrs = {
     Revenue: [
-      durationFact("2026-06-30", "2026-04-01", 140),
-      durationFact("2026-03-31", "2026-01-01", 120)
+      foreignQuarter("2026-06-30", "2026-04-01", 140),
+      foreignQuarter("2026-03-31", "2026-01-01", 120)
     ],
     ProfitLoss: [
-      durationFact("2026-06-30", "2026-04-01", 14),
-      durationFact("2026-03-31", "2026-01-01", 10)
+      foreignQuarter("2026-06-30", "2026-04-01", 14),
+      foreignQuarter("2026-03-31", "2026-01-01", 10)
     ],
     CashFlowsFromUsedInOperatingActivities: [
-      durationFact("2026-06-30", "2026-04-01", 25),
-      durationFact("2026-03-31", "2026-01-01", 20)
+      foreignQuarter("2026-06-30", "2026-04-01", 25),
+      foreignQuarter("2026-03-31", "2026-01-01", 20)
     ],
     PurchaseOfPropertyPlantAndEquipment: [
-      durationFact("2026-06-30", "2026-04-01", -5),
-      durationFact("2026-03-31", "2026-01-01", -4)
+      foreignQuarter("2026-06-30", "2026-04-01", -5),
+      foreignQuarter("2026-03-31", "2026-01-01", -4)
     ]
   };
   const facts = {
