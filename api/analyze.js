@@ -237,10 +237,42 @@ const pct = value =>
 let tickerMap = null;
 let tickerAt = 0;
 
+// Preserve every exact ticker match. A plain object keyed by ticker silently
+// overwrites duplicate symbols and can select the wrong issuer.
+function buildTickerIndex(data) {
+  const index = new Map();
+  const fields = Array.isArray(data?.fields) ? data.fields : [];
+  const rows = Array.isArray(data?.data) ? data.data : [];
+
+  const cikIndex = fields.indexOf("cik");
+  const nameIndex = fields.indexOf("name");
+  const tickerIndex = fields.indexOf("ticker");
+  const exchangeIndex = fields.indexOf("exchange");
+
+  for (const row of rows) {
+    const symbol = String(row?.[tickerIndex] || "").trim().toUpperCase();
+    const name = String(row?.[nameIndex] || "").trim();
+    const cik = row?.[cikIndex];
+    if (!symbol || !name || cik == null || tickerIndex < 0 || nameIndex < 0 || cikIndex < 0) continue;
+
+    const company = {
+      cik_str: Number(cik),
+      title: name,
+      ticker: symbol,
+      exchange: exchangeIndex >= 0 ? String(row?.[exchangeIndex] || "").trim() : ""
+    };
+    const matches = index.get(symbol) || [];
+    matches.push(company);
+    index.set(symbol, matches);
+  }
+
+  return index;
+}
+
 async function lookup(ticker) {
   if (!tickerMap || Date.now() - tickerAt > DAY) {
     const response = await fetchWithTimeout(
-      "https://www.sec.gov/files/company_tickers.json",
+      "https://www.sec.gov/files/company_tickers_exchange.json",
       { headers: H() }
     );
 
@@ -251,17 +283,22 @@ async function lookup(ticker) {
       );
     }
 
-    const data = await response.json();
-    tickerMap = {};
-
-    for (const company of Object.values(data)) {
-      tickerMap[String(company.ticker).toUpperCase()] = company;
-    }
-
+    tickerMap = buildTickerIndex(await response.json());
     tickerAt = Date.now();
   }
 
-  return tickerMap[ticker];
+  const matches = tickerMap.get(ticker) || [];
+  if (matches.length > 1) {
+    const options = matches
+      .map(company => `${company.title}${company.exchange ? ` (${company.exchange})` : ""}`)
+      .join("; ");
+    throw new HttpError(
+      409,
+      `The ticker ${ticker} matches more than one SEC issuer: ${options}. Plainvest needs an unambiguous company/exchange selection before analyzing it.`
+    );
+  }
+
+  return matches[0] || null;
 }
 
 // Select annual or instant balance-sheet facts.
