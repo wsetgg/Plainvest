@@ -201,8 +201,16 @@ const near = (a, b, toleranceDays) =>
   Number.isFinite(b) &&
   Math.abs(a - b) <= toleranceDays * DAY;
 
-const rowsOf = (facts, concept) =>
-  facts.facts?.["us-gaap"]?.[concept]?.units?.USD || [];
+const rowsOf = (facts, concept) => {
+  // SEC Company Facts can expose standardized facts under US-GAAP or IFRS.
+  // Keep this first international phase USD-only so financial statements are
+  // never accidentally combined across currencies.
+  for (const taxonomy of ["us-gaap", "ifrs-full"]) {
+    const rows = facts.facts?.[taxonomy]?.[concept]?.units?.USD;
+    if (Array.isArray(rows) && rows.length) return rows;
+  }
+  return [];
+};
 
 const money = value => {
   if (value == null || !Number.isFinite(Number(value))) {
@@ -270,8 +278,8 @@ function series(facts, concepts, instant = false, anyPeriod = false) {
     for (const row of rows) {
       if (
         anyPeriod
-          ? !["10-K", "10-Q"].includes(row.form)
-          : row.form !== "10-K" || row.fp !== "FY"
+          ? !["10-K", "10-Q", "20-F", "40-F", "6-K"].includes(row.form)
+          : !["10-K", "20-F", "40-F"].includes(row.form) || row.fp !== "FY"
       ) {
         continue;
       }
@@ -318,7 +326,7 @@ function quarters(facts, concepts) {
 
   for (const concept of concepts) {
     const sourceRows = rowsOf(facts, concept).filter(row =>
-      ["10-Q", "10-K"].includes(row.form) &&
+      ["10-Q", "10-K", "20-F", "40-F", "6-K"].includes(row.form) &&
       row.start &&
       row.end &&
       Number.isFinite(Number(row.val)) &&
@@ -346,19 +354,19 @@ function quarters(facts, concepts) {
     const duration = row => (d(row.end) - d(row.start)) / DAY;
 
     const direct = source.filter(row =>
-      row.form === "10-Q" &&
+      ["10-Q", "6-K"].includes(row.form) &&
       duration(row) >= 70 &&
       duration(row) <= 110
     );
 
     const ytd = source.filter(row =>
-      row.form === "10-Q" &&
+      ["10-Q", "6-K"].includes(row.form) &&
       duration(row) >= 120 &&
       duration(row) <= 310
     );
 
     const annual = source.filter(row =>
-      row.form === "10-K" &&
+      ["10-K", "20-F", "40-F"].includes(row.form) &&
       duration(row) >= 340 &&
       duration(row) <= 400
     );
@@ -495,12 +503,14 @@ function balance(facts) {
 
   const equityMap = instantMap(facts, [
     "StockholdersEquity",
-    "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
+    "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+    "Equity"
   ]);
 
   const cashMap = instantMap(facts, [
     "CashAndCashEquivalentsAtCarryingValue",
-    "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"
+    "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+    "CashAndCashEquivalents"
   ]);
 
   const currentAssetsMap = instantMap(facts, [
@@ -513,15 +523,18 @@ function balance(facts) {
 
   const receivablesMap = instantMap(facts, [
     "AccountsReceivableNetCurrent",
-    "AccountsNotesAndLoansReceivableNetCurrent"
+    "AccountsNotesAndLoansReceivableNetCurrent",
+    "TradeAndOtherCurrentReceivables"
   ]);
 
   const inventoryMap = instantMap(facts, [
-    "InventoryNet"
+    "InventoryNet",
+    "Inventories"
   ]);
 
   const ppeMap = instantMap(facts, [
-    "PropertyPlantAndEquipmentNet"
+    "PropertyPlantAndEquipmentNet",
+    "PropertyPlantAndEquipment"
   ]);
 
   const goodwillMap = instantMap(facts, [
@@ -530,23 +543,26 @@ function balance(facts) {
 
   const intangiblesMap = instantMap(facts, [
     "FiniteLivedIntangibleAssetsNet",
-    "IntangibleAssetsNetExcludingGoodwill"
+    "IntangibleAssetsNetExcludingGoodwill",
+    "IntangibleAssetsOtherThanGoodwill"
   ]);
 
   const currentLiabilitiesMap = instantMap(facts, [
-    "LiabilitiesCurrent"
+    "LiabilitiesCurrent",
+    "CurrentLiabilities"
   ]);
 
   const noncurrentLiabilitiesMap = instantMap(facts, [
-    "LiabilitiesNoncurrent"
+    "LiabilitiesNoncurrent",
+    "NoncurrentLiabilities"
   ]);
 
   // Avoid treating a single debt component as total debt. Combine current
   // and non-current components when available; use the generic long-term
   // debt tag only as a fallback when a dedicated component is absent.
-  const currentDebtMap = instantMap(facts, ["LongTermDebtCurrent"]);
-  const noncurrentDebtMap = instantMap(facts, ["LongTermDebtNoncurrent"]);
-  const reportedDebtMap = instantMap(facts, ["LongTermDebt"]);
+  const currentDebtMap = instantMap(facts, ["LongTermDebtCurrent", "BorrowingsCurrent"]);
+  const noncurrentDebtMap = instantMap(facts, ["LongTermDebtNoncurrent", "BorrowingsNoncurrent"]);
+  const reportedDebtMap = instantMap(facts, ["LongTermDebt", "Borrowings"]);
   const debtEnds = new Set([
     ...currentDebtMap.keys(),
     ...noncurrentDebtMap.keys(),
@@ -674,13 +690,15 @@ function balanceSheetObject(facts, end) {
 }
 
 function analyzeFacts(facts) {
-  if (!facts.facts?.["us-gaap"]) return null;
+  if (!facts.facts?.["us-gaap"] && !facts.facts?.["ifrs-full"]) return null;
 
   const revenueQuarters = quarters(facts, [
     "Revenues",
     "RevenueFromContractWithCustomerExcludingAssessedTax",
     "RevenueFromContractWithCustomerIncludingAssessedTax",
-    "SalesRevenueNet"
+    "SalesRevenueNet",
+    "Revenue",
+    "RevenueFromContractsWithCustomers"
   ]);
 
   if (revenueQuarters.length < 2) return null;
@@ -691,12 +709,14 @@ function analyzeFacts(facts) {
   ]);
 
   const operatingCashQuarters = quarters(facts, [
-    "NetCashProvidedByUsedInOperatingActivities"
+    "NetCashProvidedByUsedInOperatingActivities",
+    "CashFlowsFromUsedInOperatingActivities"
   ]);
 
   const capexQuarters = quarters(facts, [
     "PaymentsToAcquirePropertyPlantAndEquipment",
-    "PaymentsToAcquireProductiveAssets"
+    "PaymentsToAcquireProductiveAssets",
+    "PurchaseOfPropertyPlantAndEquipment"
   ]);
 
   const cashAt = (end, offset = 0) => {
@@ -1090,8 +1110,12 @@ function eventsFrom(submissions, cik) {
   const output = [];
 
   for (let i = 0; i < recent.form.length; i++) {
+    const form = String(recent.form[i] || "");
+    const isEightK = form.startsWith("8-K");
+    const isSixK = form.startsWith("6-K");
+
     if (
-      !String(recent.form[i]).startsWith("8-K") ||
+      (!isEightK && !isSixK) ||
       d(recent.filingDate[i]) < cutoff
     ) {
       continue;
@@ -1102,7 +1126,9 @@ function eventsFrom(submissions, cik) {
       .map(value => value.trim())
       .filter(value => ITEMS[value]);
 
-    if (!matchingItems.length) continue;
+    // Form 6-K does not use the same standardized item codes as Form 8-K.
+    // Keep the filing and source link even when its title must remain generic.
+    if (!matchingItems.length && !isSixK) continue;
 
     // Prefer the most significant recognized item, but keep announcements
     // ordered by date below so old negative events do not hide newer filings.
@@ -1110,14 +1136,15 @@ function eventsFrom(submissions, cik) {
     const hit = matchingItems.sort((a, b) =>
       rank[ITEMS[a][0]] - rank[ITEMS[b][0]]
     )[0];
+    const mappedItem = hit ? ITEMS[hit] : ["event", "International company update"];
 
     const accession = String(recent.accessionNumber[i] || "").replace(/-/g, "");
     const document = recent.primaryDocument?.[i];
 
     output.push({
       date: recent.filingDate[i],
-      kind: ITEMS[hit][0],
-      title: ITEMS[hit][1],
+      kind: mappedItem[0],
+      title: mappedItem[1],
       form: recent.form[i],
       accessionNumber: recent.accessionNumber[i] || null,
       url: document
@@ -1554,7 +1581,7 @@ async function handler(req, res) {
 
       throw new HttpError(
         404,
-        `No US-listed company found for ${ticker}. Plainvest covers US-listed companies only, so check the ticker. ETFs and non-US stocks aren't supported yet.`
+        `No SEC-listed company found for ${ticker}. Plainvest supports U.S.-listed companies that file with the SEC, including eligible international issuers. Stocks listed only on foreign exchanges are not supported yet; check the ticker and exchange. ETFs and funds aren't supported yet.`
       );
     }
 
@@ -1605,7 +1632,7 @@ async function handler(req, res) {
       if (forms.has("20-F") || forms.has("40-F")) {
         return new HttpError(
           422,
-          `${company.title} is a foreign company that files different reports with the SEC (20-F or 40-F), which Plainvest can't read yet. Companies that file standard US reports, like AAPL, work.`
+          `${company.title} files international reports with the SEC (20-F or 40-F), but the standardized USD financial facts available to Plainvest are not sufficient for a reliable quarterly analysis yet. Some figures may use another currency or a reporting format the SEC does not standardize here.`
         );
       }
 
